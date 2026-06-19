@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="zh-CN" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MySQL Web Console</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = { darkMode: "class" };
+    </script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  </head>
+  <body class="bg-gray-900 text-gray-100 min-h-screen font-mono">
+    <div id="app" class="max-w-3xl mx-auto px-4 py-6">
+      <header class="mb-6">
+        <h1 class="text-xl font-bold text-blue-400 tracking-wide">
+          MySQL Web Console
+        </h1>
+        <p class="text-sm text-gray-500 mt-1">局域网移动端 SQL 控制台</p>
+      </header>
+
+      <section class="mb-4">
+        <div class="flex flex-wrap gap-2 mb-3">
+          <button
+            v-for="tag in quickTags"
+            :key="tag.label"
+            @click="sql = tag.sql"
+            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
+          >
+            {{ tag.label }}
+          </button>
+
+          <div class="relative" v-if="history.length > 0">
+            <button
+              @click.stop="historyOpen = !historyOpen"
+              class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors inline-flex items-center gap-1"
+            >
+              <span>历史记录</span>
+              <svg
+                class="w-3 h-3 transition-transform"
+                :class="{ 'rotate-180': historyOpen }"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M19 9l-7 7-7-7"
+                />
+              </svg>
+            </button>
+            <div
+              v-if="historyOpen"
+              class="absolute top-full left-0 mt-1 w-72 bg-gray-800 border border-gray-700 rounded shadow-lg z-10 max-h-60 overflow-y-auto"
+            >
+              <button
+                v-for="(h, i) in history"
+                :key="i"
+                @click="sql = h; historyOpen = false"
+                class="block w-full text-left px-3 py-2 text-sm hover:bg-gray-700 transition-colors truncate border-b border-gray-700/50 last:border-b-0"
+              >
+                {{ h }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <textarea
+          v-model="sql"
+          rows="4"
+          placeholder="输入 SQL 语句..."
+          class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 font-mono text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-y transition-colors"
+          @keydown="onKeydown"
+        ></textarea>
+      </section>
+
+      <section class="mb-6">
+        <button
+          @click="executeSql"
+          :disabled="loading"
+          class="w-full py-3 text-lg rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
+          :class="loading ? 'bg-gray-600 cursor-not-allowed opacity-50' : 'bg-blue-600 hover:bg-blue-500 text-white'"
+        >
+          <svg
+            v-if="loading"
+            class="animate-spin h-5 w-5 text-white"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+            ></path>
+          </svg>
+          {{ loading ? '执行中...' : '执行' }}
+        </button>
+      </section>
+
+      <section id="output-area" v-if="result">
+        <div
+          class="rounded-lg px-4 py-3 mb-4 text-sm"
+          :class="result.success
+          ? 'bg-green-900/50 border border-green-700 text-green-300'
+          : 'bg-red-900/50 border border-red-700 text-red-300'"
+        >
+          <template v-if="result.success">
+            <template v-if="result.columns && result.columns.length > 0">
+              查询成功，耗时 {{ result.duration_ms }} ms，共 {{
+              result.rows.length }} 行
+            </template>
+            <template v-else>
+              执行成功，影响 {{ result.affected_rows }} 行，耗时 {{
+              result.duration_ms }} ms
+            </template>
+          </template>
+          <template v-else> {{ result.message }} </template>
+        </div>
+
+        <div
+          v-if="result.success && result.affected_rows > 0 && (!result.columns || result.columns.length === 0)"
+          class="text-yellow-400 font-semibold mb-4 text-sm"
+        >
+          影响行数：{{ result.affected_rows }} 行
+        </div>
+
+        <div
+          v-if="result.columns && result.columns.length > 0"
+          class="overflow-x-auto rounded-lg border border-gray-700 max-h-[60vh] overflow-y-auto"
+        >
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="bg-gray-700">
+                <th
+                  v-for="col in result.columns"
+                  :key="col"
+                  class="px-4 py-2 text-left font-bold whitespace-nowrap text-gray-200"
+                >
+                  {{ col }}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="(row, index) in result.rows"
+                :key="index"
+                :class="index % 2 === 0 ? 'bg-gray-800' : 'bg-gray-800/50'"
+              >
+                <td
+                  v-for="(cell, ci) in row"
+                  :key="ci"
+                  class="px-4 py-2 whitespace-nowrap"
+                >
+                  <span v-if="cell === null" class="text-gray-500 italic"
+                    >NULL</span
+                  >
+                  <span v-else>{{ cell }}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      const { createApp, ref, nextTick } = Vue;
+
+      createApp({
+        setup() {
+          const sql = ref("");
+          const loading = ref(false);
+          const result = ref(null);
+          const history = ref([]);
+          const historyOpen = ref(false);
+
+          const quickTags = [
+            { label: "SHOW TABLES", sql: "SHOW TABLES;" },
+            {
+              label: "SELECT * LIMIT 10",
+              sql: "SELECT * FROM <table> LIMIT 10;",
+            },
+            { label: "DESC", sql: "DESC <table>;" },
+          ];
+
+          function addToHistory(sqlStr) {
+            history.value = history.value.filter((h) => h !== sqlStr);
+            history.value.unshift(sqlStr);
+            if (history.value.length > 5) {
+              history.value = history.value.slice(0, 5);
+            }
+          }
+
+          async function executeSql() {
+            if (!sql.value.trim() || loading.value) return;
+
+            loading.value = true;
+            result.value = null;
+
+            try {
+              const response = await fetch("/api/execute", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sql: sql.value.trim() }),
+              });
+              const data = await response.json();
+              result.value = data;
+
+              if (data.success) {
+                addToHistory(sql.value.trim());
+              }
+            } catch (err) {
+              result.value = {
+                success: false,
+                message: "网络错误: " + err.message,
+                duration_ms: 0.0,
+                columns: [],
+                rows: [],
+                affected_rows: 0,
+              };
+            } finally {
+              loading.value = false;
+              nextTick(() => {
+                const el = document.getElementById("output-area");
+                if (el) {
+                  el.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+              });
+            }
+          }
+
+          function onKeydown(e) {
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+              e.preventDefault();
+              executeSql();
+            }
+          }
+
+          document.addEventListener("click", () => {
+            historyOpen.value = false;
+          });
+
+          return {
+            sql,
+            loading,
+            result,
+            history,
+            historyOpen,
+            quickTags,
+            executeSql,
+            onKeydown,
+          };
+        },
+      }).mount("#app");
+    </script>
+  </body>
+</html>
