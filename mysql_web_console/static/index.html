@@ -41,7 +41,16 @@
           >
             ⇥ Tab
           </button>
+          <button
+            @click="clearSql"
+            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
+            title="清空输入框"
+          >
+            ✕ 清空
+          </button>
+        </div>
 
+        <div class="flex flex-wrap gap-2 mb-3">
           <div class="relative" v-if="history.length > 0">
             <button
               @click.stop="historyOpen = !historyOpen"
@@ -77,9 +86,7 @@
               </button>
             </div>
           </div>
-        </div>
 
-        <div class="flex flex-wrap gap-2 mb-3">
           <div class="relative">
             <button
               @click.stop="toggleProcDropdown"
@@ -254,6 +261,24 @@
         </div>
 
         <div
+          v-if="result.columns && result.columns.length > 0"
+          class="flex gap-2 mt-2"
+        >
+          <button
+            @click="copyAsMarkdown(result.columns, result.rows)"
+            class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1"
+          >
+            📋 复制 Markdown
+          </button>
+          <button
+            @click="downloadCsv(result.columns, result.rows, 'query_result.csv')"
+            class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1"
+          >
+            ⬇️ 下载 CSV
+          </button>
+        </div>
+
+        <div
           v-if="result.out_params && result.out_params.length > 0"
           class="mt-4"
         >
@@ -294,6 +319,20 @@
                 </tr>
               </tbody>
             </table>
+          </div>
+          <div class="flex gap-2 mt-2">
+            <button
+              @click="copyAsMarkdown(['参数名', '值'], result.out_params.map(p => [p.name, p.value]))"
+              class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1"
+            >
+              📋 复制 Markdown
+            </button>
+            <button
+              @click="downloadCsv(['参数名', '值'], result.out_params.map(p => [p.name, p.value]), 'out_params.csv')"
+              class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1"
+            >
+              ⬇️ 下载 CSV
+            </button>
           </div>
         </div>
       </section>
@@ -353,6 +392,13 @@
           </div>
         </div>
       </section>
+
+      <div
+        v-if="copyToast"
+        class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg shadow-lg z-50"
+      >
+        {{ copyToast }}
+      </div>
     </div>
 
     <script>
@@ -377,6 +423,8 @@
           const randResult = ref(null);
           const randError = ref("");
           const randOpen = ref(true);
+
+          const copyToast = ref("");
 
           const filteredProcList = computed(() => {
             const keyword = procSearch.value.trim().toLowerCase();
@@ -530,6 +578,104 @@
             });
           }
 
+          function clearSql() {
+            sql.value = "";
+            nextTick(() => {
+              const ta = document.querySelector("textarea");
+              if (ta) ta.focus();
+            });
+          }
+
+          function escapeCsvCell(cell) {
+            if (cell === null || cell === undefined) return "";
+            const str = String(cell);
+            if (
+              str.includes(",") ||
+              str.includes('"') ||
+              str.includes("\n") ||
+              str.includes("\r")
+            ) {
+              return '"' + str.replace(/"/g, '""') + '"';
+            }
+            return str;
+          }
+
+          function fallbackCopyText(text) {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.setAttribute("readonly", "");
+            ta.style.position = "fixed";
+            ta.style.left = "-9999px";
+            ta.style.top = "-9999px";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.setSelectionRange(0, ta.value.length);
+            let ok = false;
+            try {
+              ok = document.execCommand("copy");
+            } catch (e) {
+              ok = false;
+            }
+            document.body.removeChild(ta);
+            return ok;
+          }
+
+          function copyAsMarkdown(columns, rows) {
+            const header = "| " + columns.join(" | ") + " |";
+            const separator =
+              "| " + columns.map(() => "---").join(" | ") + " |";
+            const body = rows
+              .map(
+                (row) =>
+                  "| " +
+                  row
+                    .map((cell) => (cell === null ? "NULL" : String(cell)))
+                    .join(" | ") +
+                  " |",
+              )
+              .join("\n");
+            const md = header + "\n" + separator + "\n" + body;
+            if (navigator.clipboard && window.isSecureContext) {
+              navigator.clipboard
+                .writeText(md)
+                .then(() => {
+                  copyToast.value = "已复制到剪贴板";
+                  setTimeout(() => {
+                    copyToast.value = "";
+                  }, 1500);
+                })
+                .catch(() => {
+                  const ok = fallbackCopyText(md);
+                  copyToast.value = ok ? "已复制到剪贴板" : "复制失败";
+                  setTimeout(() => {
+                    copyToast.value = "";
+                  }, 1500);
+                });
+            } else {
+              const ok = fallbackCopyText(md);
+              copyToast.value = ok ? "已复制到剪贴板" : "复制失败";
+              setTimeout(() => {
+                copyToast.value = "";
+              }, 1500);
+            }
+          }
+
+          function downloadCsv(columns, rows, filename) {
+            const header = columns.map(escapeCsvCell).join(",");
+            const body = rows
+              .map((row) => row.map(escapeCsvCell).join(","))
+              .join("\n");
+            const csv = "\uFEFF" + header + "\n" + body;
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+          }
+
           function onKeydown(e) {
             if (e.key === "Tab") {
               e.preventDefault();
@@ -569,6 +715,10 @@
             randError,
             randOpen,
             generateRandom,
+            clearSql,
+            copyAsMarkdown,
+            downloadCsv,
+            copyToast,
           };
         },
       }).mount("#app");
