@@ -115,6 +115,41 @@ async def get_procedure_params(proc_name: str) -> list[dict]:
         return []
 
 
+async def validate_sql(sql: str) -> dict:
+    if not sql or not sql.strip():
+        return {"valid": False, "message": "SQL 语句不能为空"}
+
+    multi_stmt_error = _check_single_statement(sql)
+    if multi_stmt_error:
+        return {"valid": False, "message": multi_stmt_error}
+
+    if _pool is None:
+        return {"valid": False, "message": "数据库连接池未初始化"}
+
+    sql_stripped = sql.strip()
+    sql_upper = sql_stripped.upper()
+
+    try:
+        async with _pool.acquire() as conn:
+            if sql_upper.startswith("SELECT"):
+                async with conn.cursor() as cursor:
+                    await cursor.execute("EXPLAIN " + sql_stripped)
+            elif sql_upper.startswith(("SHOW", "DESC", "EXPLAIN")):
+                async with conn.cursor() as cursor:
+                    await cursor.execute(sql_stripped)
+                    await cursor.fetchall()
+            else:
+                await conn.begin()
+                try:
+                    async with conn.cursor() as cursor:
+                        await cursor.execute(sql_stripped)
+                finally:
+                    await conn.rollback()
+        return {"valid": True, "message": "SQL 格式正确"}
+    except Exception as e:
+        return {"valid": False, "message": str(e)}
+
+
 # 核心 SQL 执行函数
 # 执行流程：空值检查 → 单语句检查 → 连接池获取 → 执行 SQL → 结果封装
 async def execute_sql(sql: str) -> dict:

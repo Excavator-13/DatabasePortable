@@ -67,6 +67,12 @@ async def execute_sql(body: SqlRequest):
         }
 
 
+@app.post("/api/validate")
+async def validate_sql(body: SqlRequest):
+    result = await db.validate_sql(body.sql)
+    return result
+
+
 @app.get("/api/procedures")
 async def get_procedures():
     procedures = await db.get_procedures()
