@@ -5,13 +5,16 @@
 ## 功能特性
 
 - 📱 移动端优先的暗色模式 UI
+- 🗄️ 数据库表列表面板，点击查看表结构（DESC），一键生成 SELECT / INSERT / UPDATE / DELETE 骨架语句
+- 📞 浏览并快速生成 `CALL PROCEDURE` 语句（自动识别 IN/OUT 参数，OUT 参数自动查询并独立展示）
+- ⭐ SQL 收藏功能，支持搜索过滤与 localStorage 持久化，收藏前自动校验语法
 - ⇥ Tab 缩进按钮，方便手机端在 SQL 中插入缩进保持格式美观
-- 📜 最近 5 条历史记录快速恢复
+- ✕ 清空按钮，一键清空 SQL 输入框
 - 📊 查询结果表格展示，支持横向滚动与斑马纹
+- 📋 结果导出：复制 Markdown 表格 / 下载 CSV（支持 SELECT 结果集与 OUT 参数表）
 - 🔒 单语句安全限制，防止批量执行
 - ⏱️ 执行耗时实时反馈
 - 🗄️ 当前数据库实时显示
-- 📞 支持浏览并快速生成 `CALL PROCEDURE` 语句（自动识别 IN/OUT 参数）
 - 🎲 内置随机数生成器（1 ~ N 范围）
 - ⌨️ `Ctrl+Enter` / `Cmd+Enter` 快捷执行，`Tab` 键直接插入缩进
 
@@ -133,7 +136,59 @@ ipconfig
     [1, "Alice"],
     [2, "Bob"]
   ],
-  "affected_rows": 0
+  "affected_rows": 0,
+  "out_params": []
+}
+```
+
+### 校验 SQL 语法
+
+`POST /api/validate`
+
+**请求体**：
+
+```json
+{
+  "sql": "SELECT * FROM users WHERE id = 1;"
+}
+```
+
+**响应体**：
+
+```json
+{
+  "valid": true,
+  "message": "SQL 格式正确"
+}
+```
+
+### 获取表列表
+
+`GET /api/tables`
+
+**响应体**：
+
+```json
+{
+  "tables": ["users", "orders", "products"]
+}
+```
+
+### 获取表结构
+
+`GET /api/tables/{name}/desc`
+
+**响应体**：
+
+```json
+{
+  "success": true,
+  "message": "查询成功",
+  "columns": ["Field", "Type", "Null", "Key", "Default", "Extra"],
+  "rows": [
+    ["id", "int", "NO", "PRI", null, "auto_increment"],
+    ["name", "varchar(255)", "YES", "", null, ""]
+  ]
 }
 ```
 
@@ -158,8 +213,8 @@ ipconfig
 ```json
 {
   "params": [
-    { "name": "user_id", "direction": "IN" },
-    { "name": "result", "direction": "OUT" }
+    { "name": "user_id", "type": "int", "direction": "IN" },
+    { "name": "result", "type": "int", "direction": "OUT" }
   ]
 }
 ```
@@ -168,5 +223,6 @@ ipconfig
 
 - 仅支持单条 SQL 语句执行，自动拒绝含多条语句的请求
 - 空值与纯空格输入会被拦截
+- SQL 校验接口对非 SELECT 语句使用事务回滚，不产生数据库副作用
 - 所有数据库异常均被捕获并格式化返回，不会导致服务崩溃
 - 本项目设计为局域网内使用，请勿暴露到公网
