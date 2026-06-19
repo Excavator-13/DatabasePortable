@@ -66,6 +66,50 @@ async def get_current_db() -> str | None:
         return None
 
 
+async def get_procedures() -> list[str]:
+    if _pool is None:
+        return []
+    try:
+        current_db = await get_current_db()
+        if not current_db:
+            return []
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SHOW PROCEDURE STATUS WHERE Db = %s", (current_db,)
+                )
+                rows = await cursor.fetchall()
+                return sorted(row[1] for row in rows)
+    except Exception:
+        return []
+
+
+async def get_procedure_params(proc_name: str) -> list[dict]:
+    if _pool is None:
+        return []
+    try:
+        current_db = await get_current_db()
+        if not current_db:
+            return []
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT PARAMETER_NAME, DATA_TYPE, PARAMETER_MODE "
+                    "FROM information_schema.PARAMETERS "
+                    "WHERE SPECIFIC_SCHEMA = %s AND SPECIFIC_NAME = %s "
+                    "AND PARAMETER_MODE IS NOT NULL "
+                    "ORDER BY ORDINAL_POSITION",
+                    (current_db, proc_name),
+                )
+                rows = await cursor.fetchall()
+                return [
+                    {"name": row[0], "type": row[1], "direction": row[2]}
+                    for row in rows
+                ]
+    except Exception:
+        return []
+
+
 # 核心 SQL 执行函数
 # 执行流程：空值检查 → 单语句检查 → 连接池获取 → 执行 SQL → 结果封装
 async def execute_sql(sql: str) -> dict:

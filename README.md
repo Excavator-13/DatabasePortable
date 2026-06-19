@@ -10,6 +10,10 @@
 - 📊 查询结果表格展示，支持横向滚动与斑马纹
 - 🔒 单语句安全限制，防止批量执行
 - ⏱️ 执行耗时实时反馈
+- 🗄️ 当前数据库实时显示
+- 📞 支持浏览并快速生成 `CALL PROCEDURE` 语句（自动识别 IN/OUT 参数）
+- 🎲 内置随机数生成器（1 ~ N 范围）
+- ⌨️ `Ctrl+Enter` / `Cmd+Enter` 快捷执行
 
 ## 技术栈
 
@@ -93,6 +97,18 @@ ipconfig
 
 ## API 接口
 
+### 获取当前数据库
+
+`GET /api/info`
+
+**响应体**：
+
+```json
+{
+  "database": "mydb"
+}
+```
+
 ### 执行 SQL 语句
 
 `POST /api/execute`
@@ -118,6 +134,33 @@ ipconfig
     [2, "Bob"]
   ],
   "affected_rows": 0
+}
+```
+
+### 获取所有 Stored Procedures
+
+`GET /api/procedures`
+
+**响应体**：
+
+```json
+{
+  "procedures": ["proc_get_user", "proc_update_status"]
+}
+```
+
+### 获取 Procedure 参数信息
+
+`GET /api/procedures/{name}/params`
+
+**响应体**：
+
+```json
+{
+  "params": [
+    { "name": "user_id", "direction": "IN" },
+    { "name": "result", "direction": "OUT" }
+  ]
 }
 ```
 

@@ -65,6 +65,18 @@ async def execute_sql(body: SqlRequest):
         }
 
 
+@app.get("/api/procedures")
+async def get_procedures():
+    procedures = await db.get_procedures()
+    return {"procedures": procedures}
+
+
+@app.get("/api/procedures/{name}/params")
+async def get_procedure_params(name: str):
+    params = await db.get_procedure_params(name)
+    return {"params": params}
+
+
 # 挂载静态文件目录，需放在路由定义之后，避免拦截 /api 等路由
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
