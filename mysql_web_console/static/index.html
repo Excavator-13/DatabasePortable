@@ -13,10 +13,23 @@
   <body class="bg-gray-900 text-gray-100 min-h-screen font-mono">
     <div id="app" class="max-w-3xl mx-auto px-4 py-6">
       <header class="mb-6">
-        <h1 class="text-xl font-bold text-blue-400 tracking-wide">
-          MySQL Web Console
-        </h1>
-        <p class="text-sm text-gray-500 mt-1">局域网移动端 SQL 控制台</p>
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-xl font-bold text-blue-400 tracking-wide">
+              MySQL Web Console
+            </h1>
+            <p class="text-sm text-gray-500 mt-1">局域网移动端 SQL 控制台</p>
+          </div>
+          <div
+            v-if="currentDb"
+            class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm"
+          >
+            <span class="text-gray-400">DB:</span>
+            <span class="text-emerald-400 font-semibold ml-1"
+              >{{ currentDb }}</span
+            >
+          </div>
+        </div>
       </header>
 
       <section class="mb-4">
@@ -184,6 +197,7 @@
           const result = ref(null);
           const history = ref([]);
           const historyOpen = ref(false);
+          const currentDb = ref(null);
 
           const quickTags = [
             { label: "SHOW TABLES", sql: "SHOW TABLES;" },
@@ -193,6 +207,18 @@
             },
             { label: "DESC", sql: "DESC <table>;" },
           ];
+
+          async function fetchDbInfo() {
+            try {
+              const res = await fetch("/api/info");
+              const data = await res.json();
+              currentDb.value = data.database || null;
+            } catch (e) {
+              currentDb.value = null;
+            }
+          }
+
+          fetchDbInfo();
 
           function addToHistory(sqlStr) {
             history.value = history.value.filter((h) => h !== sqlStr);
@@ -219,6 +245,9 @@
 
               if (data.success) {
                 addToHistory(sql.value.trim());
+                if (sql.value.trim().toUpperCase().startsWith("USE ")) {
+                  fetchDbInfo();
+                }
               }
             } catch (err) {
               result.value = {
@@ -257,6 +286,7 @@
             result,
             history,
             historyOpen,
+            currentDb,
             quickTags,
             executeSql,
             onKeydown,
