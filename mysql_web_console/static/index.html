@@ -35,12 +35,11 @@
       <section class="mb-4">
         <div class="flex flex-wrap gap-2 mb-3">
           <button
-            v-for="tag in quickTags"
-            :key="tag.label"
-            @click="sql = tag.sql"
+            @click="insertTab"
             class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
+            title="在光标处插入缩进"
           >
-            {{ tag.label }}
+            ⇥ Tab
           </button>
 
           <div class="relative" v-if="history.length > 0">
@@ -78,7 +77,9 @@
               </button>
             </div>
           </div>
+        </div>
 
+        <div class="flex flex-wrap gap-2 mb-3">
           <div class="relative">
             <button
               @click.stop="toggleProcDropdown"
@@ -328,15 +329,6 @@
             );
           });
 
-          const quickTags = [
-            { label: "SHOW TABLES", sql: "SHOW TABLES;" },
-            {
-              label: "SELECT * LIMIT 10",
-              sql: "SELECT * FROM <table> LIMIT 10;",
-            },
-            { label: "DESC", sql: "DESC <table>;" },
-          ];
-
           async function fetchDbInfo() {
             try {
               const res = await fetch("/api/info");
@@ -465,7 +457,25 @@
             }
           }
 
+          function insertTab() {
+            const ta = document.querySelector("textarea");
+            if (!ta) return;
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            const val = sql.value;
+            sql.value = val.substring(0, start) + "\t" + val.substring(end);
+            nextTick(() => {
+              ta.selectionStart = ta.selectionEnd = start + 1;
+              ta.focus();
+            });
+          }
+
           function onKeydown(e) {
+            if (e.key === "Tab") {
+              e.preventDefault();
+              insertTab();
+              return;
+            }
             if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
               e.preventDefault();
               executeSql();
@@ -484,7 +494,7 @@
             history,
             historyOpen,
             currentDb,
-            quickTags,
+            insertTab,
             executeSql,
             onKeydown,
             procList,
