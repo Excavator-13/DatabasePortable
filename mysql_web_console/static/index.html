@@ -33,9 +33,203 @@
       </header>
 
       <section class="mb-4">
+        <div
+          class="bg-gray-800 border border-gray-700 rounded-lg overflow-hidden"
+          style="height: 200px"
+        >
+          <div
+            v-if="tablesLoading"
+            class="flex items-center justify-center h-full text-gray-500 text-sm"
+          >
+            <svg
+              class="animate-spin h-5 w-5 mr-2"
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+            >
+              <circle
+                class="opacity-25"
+                cx="12"
+                cy="12"
+                r="10"
+                stroke="currentColor"
+                stroke-width="4"
+              ></circle>
+              <path
+                class="opacity-75"
+                fill="currentColor"
+                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+              ></path>
+            </svg>
+            加载中...
+          </div>
+          <div
+            v-else-if="!currentDb"
+            class="flex items-center justify-center h-full text-gray-500 text-sm"
+          >
+            未连接数据库
+          </div>
+          <div
+            v-else-if="tableList.length === 0 && !tablesLoading"
+            class="flex items-center justify-center h-full text-gray-500 text-sm"
+          >
+            当前数据库无表
+          </div>
+          <template v-else-if="tableListView === 'list'">
+            <div
+              class="h-full overflow-y-auto"
+              style="-webkit-overflow-scrolling: touch"
+            >
+              <div
+                v-for="t in tableList"
+                :key="t"
+                @click="openTableDetail(t)"
+                class="flex items-center justify-between px-4 hover:bg-gray-700 transition-colors cursor-pointer border-b border-gray-700/50 last:border-b-0"
+                style="min-height: 44px"
+              >
+                <span class="text-sm text-emerald-400 font-medium truncate"
+                  >{{ t }}</span
+                >
+                <svg
+                  class="w-4 h-4 text-gray-500 shrink-0 ml-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M9 5l7 7-7 7"
+                  ></path>
+                </svg>
+              </div>
+            </div>
+          </template>
+          <template v-else-if="tableListView === 'detail'">
+            <div class="flex flex-col h-full">
+              <div
+                class="flex items-center px-3 py-1.5 border-b border-gray-700/50 shrink-0"
+              >
+                <button
+                  @click="tableListView = 'list'"
+                  @mousedown.prevent
+                  class="bg-gray-700 hover:bg-gray-600 text-xs px-2 py-1 rounded transition-colors inline-flex items-center gap-1 shrink-0"
+                >
+                  ← 返回
+                </button>
+                <span
+                  class="text-sm text-emerald-400 font-semibold truncate ml-2"
+                  >{{ selectedTable }}</span
+                >
+              </div>
+              <div
+                class="flex items-center gap-1.5 px-3 py-1.5 border-b border-gray-700 shrink-0"
+              >
+                <button
+                  @click="fillSelect"
+                  @mousedown.prevent
+                  class="bg-blue-800 hover:bg-blue-700 text-xs px-2.5 py-1.5 rounded transition-colors flex-1"
+                >
+                  SELECT
+                </button>
+                <button
+                  @click="fillInsert"
+                  @mousedown.prevent
+                  class="bg-green-800 hover:bg-green-700 text-xs px-2.5 py-1.5 rounded transition-colors flex-1"
+                >
+                  INSERT
+                </button>
+                <button
+                  @click="fillUpdate"
+                  @mousedown.prevent
+                  class="bg-yellow-800 hover:bg-yellow-700 text-xs px-2.5 py-1.5 rounded transition-colors flex-1"
+                >
+                  UPDATE
+                </button>
+                <button
+                  @click="fillDelete"
+                  @mousedown.prevent
+                  class="bg-red-800 hover:bg-red-700 text-xs px-2.5 py-1.5 rounded transition-colors flex-1"
+                >
+                  DELETE
+                </button>
+              </div>
+              <div
+                class="flex-1 overflow-y-auto"
+                style="-webkit-overflow-scrolling: touch"
+              >
+                <div
+                  v-if="tableDetailLoading"
+                  class="flex items-center justify-center py-6 text-gray-500 text-sm"
+                >
+                  <svg
+                    class="animate-spin h-4 w-4 mr-2"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      class="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      stroke-width="4"
+                    ></circle>
+                    <path
+                      class="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    ></path>
+                  </svg>
+                  加载中...
+                </div>
+                <table
+                  v-else-if="tableDetailColumns.length > 0"
+                  class="w-full text-xs"
+                >
+                  <thead>
+                    <tr class="bg-gray-700/60">
+                      <th
+                        v-for="col in tableDetailColumns"
+                        :key="col"
+                        class="px-3 py-1.5 text-left font-bold whitespace-nowrap text-gray-300"
+                      >
+                        {{ col }}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="(row, idx) in tableDetailRows"
+                      :key="idx"
+                      :class="idx % 2 === 0 ? 'bg-gray-800' : 'bg-gray-800/50'"
+                    >
+                      <td
+                        v-for="(cell, ci) in row"
+                        :key="ci"
+                        class="px-3 py-1 whitespace-nowrap"
+                      >
+                        <span v-if="cell === null" class="text-gray-500 italic"
+                          >NULL</span
+                        >
+                        <span v-else class="text-gray-300">{{ cell }}</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </template>
+        </div>
+      </section>
+
+      <section class="mb-4">
         <div class="flex flex-wrap gap-2 mb-3">
           <button
             @click="insertTab"
+            @mousedown.prevent
             class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
             title="在光标处插入缩进"
           >
@@ -43,7 +237,8 @@
           </button>
           <button
             @click="clearSql"
-            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
+            @mousedown.prevent
+            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors focus:outline-none"
             title="清空输入框"
           >
             ✕ 清空
@@ -54,7 +249,8 @@
           <div class="relative">
             <button
               @click.stop="favOpen = !favOpen; if (favOpen) procDropdownOpen = false"
-              class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors inline-flex items-center gap-1"
+              @mousedown.prevent
+              class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors inline-flex items-center gap-1 focus:outline-none"
             >
               <span>⭐ 收藏</span>
               <svg
@@ -95,6 +291,7 @@
                 </span>
                 <button
                   @click.stop="removeFavorite(fav.id)"
+                  @mousedown.prevent
                   class="text-gray-500 hover:text-red-400 transition-colors shrink-0"
                   title="删除收藏"
                 >
@@ -121,7 +318,8 @@
           <div class="relative">
             <button
               @click.stop="toggleProcDropdown"
-              class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors inline-flex items-center gap-1"
+              @mousedown.prevent
+              class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors inline-flex items-center gap-1 focus:outline-none"
             >
               <span>CALL PROC</span>
               <svg
@@ -153,6 +351,7 @@
                 v-for="name in filteredProcList"
                 :key="name"
                 @click.stop="selectProcedure(name)"
+                @mousedown.prevent
                 class="block w-full text-left px-3 py-2 text-sm hover:bg-gray-700 transition-colors truncate border-b border-gray-700/50 last:border-b-0"
               >
                 {{ name }}
@@ -183,6 +382,7 @@
           ></textarea>
           <button
             @click="handleFavorite"
+            @mousedown.prevent
             :disabled="favLoading"
             class="absolute top-2 right-2 w-8 h-8 flex items-center justify-center rounded transition-colors z-10"
             :class="favLoading ? 'text-yellow-400 animate-pulse' : 'text-gray-500 hover:text-yellow-400 hover:bg-gray-700'"
@@ -209,6 +409,7 @@
       <section class="mb-6">
         <button
           @click="executeSql"
+          @mousedown.prevent
           :disabled="loading"
           class="w-full py-3 text-lg rounded-lg font-semibold transition-colors flex items-center justify-center gap-2"
           :class="loading ? 'bg-gray-600 cursor-not-allowed opacity-50' : 'bg-blue-600 hover:bg-blue-500 text-white'"
@@ -321,12 +522,14 @@
         >
           <button
             @click="copyAsMarkdown(result.columns, result.rows)"
+            @mousedown.prevent
             class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1"
           >
             📋 复制 Markdown
           </button>
           <button
             @click="downloadCsv(result.columns, result.rows, 'query_result.csv')"
+            @mousedown.prevent
             class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1"
           >
             ⬇️ 下载 CSV
@@ -378,12 +581,14 @@
           <div class="flex gap-2 mt-2">
             <button
               @click="copyAsMarkdown(['参数名', '值'], result.out_params.map(p => [p.name, p.value]))"
+              @mousedown.prevent
               class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1"
             >
               📋 复制 Markdown
             </button>
             <button
               @click="downloadCsv(['参数名', '值'], result.out_params.map(p => [p.name, p.value]), 'out_params.csv')"
+              @mousedown.prevent
               class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1"
             >
               ⬇️ 下载 CSV
@@ -428,6 +633,7 @@
               />
               <button
                 @click="generateRandom"
+                @mousedown.prevent
                 class="bg-emerald-600 hover:bg-emerald-500 text-sm px-4 py-2 rounded font-semibold transition-colors whitespace-nowrap"
               >
                 生成
@@ -497,6 +703,14 @@
 
           const copyToast = ref("");
 
+          const tableList = ref([]);
+          const tablesLoading = ref(false);
+          const tableListView = ref("list");
+          const selectedTable = ref("");
+          const tableDetailColumns = ref([]);
+          const tableDetailRows = ref([]);
+          const tableDetailLoading = ref(false);
+
           const filteredProcList = computed(() => {
             const keyword = procSearch.value.trim().toLowerCase();
             if (!keyword) return procList.value;
@@ -512,6 +726,94 @@
               f.sql.toLowerCase().includes(keyword),
             );
           });
+
+          async function loadTables() {
+            tablesLoading.value = true;
+            try {
+              const res = await fetch("/api/tables");
+              const data = await res.json();
+              tableList.value = data.tables || [];
+            } catch (e) {
+              tableList.value = [];
+            } finally {
+              tablesLoading.value = false;
+            }
+          }
+
+          async function openTableDetail(tableName) {
+            selectedTable.value = tableName;
+            tableListView.value = "detail";
+            tableDetailLoading.value = true;
+            tableDetailColumns.value = [];
+            tableDetailRows.value = [];
+            try {
+              const res = await fetch(
+                "/api/tables/" + encodeURIComponent(tableName) + "/desc",
+              );
+              const data = await res.json();
+              if (data.success) {
+                tableDetailColumns.value = data.columns || [];
+                tableDetailRows.value = data.rows || [];
+              }
+            } catch (e) {
+              tableDetailColumns.value = [];
+              tableDetailRows.value = [];
+            } finally {
+              tableDetailLoading.value = false;
+            }
+          }
+
+          function focusTextarea() {
+            const ta = document.querySelector("textarea");
+            if (!ta) return;
+            ta.focus();
+            const idx = sql.value.indexOf("<");
+            if (idx >= 0) {
+              requestAnimationFrame(() => {
+                ta.selectionStart = idx;
+                ta.selectionEnd = sql.value.indexOf(">", idx) + 1;
+              });
+            }
+          }
+
+          function fillSelect() {
+            sql.value =
+              "SELECT * FROM `" + selectedTable.value + "` WHERE <条件>;";
+            focusTextarea();
+          }
+
+          function fillInsert() {
+            const cols = tableDetailRows.value.map((r) => "`" + r[0] + "`");
+            const vals = tableDetailRows.value.map(() => "<值>");
+            sql.value =
+              "INSERT INTO `" +
+              selectedTable.value +
+              "` (" +
+              cols.join(", ") +
+              ")\nVALUES (" +
+              vals.join(", ") +
+              ");";
+            focusTextarea();
+          }
+
+          function fillUpdate() {
+            const sets = tableDetailRows.value.map(
+              (r) => "`" + r[0] + "` = <值>",
+            );
+            sql.value =
+              "UPDATE `" +
+              selectedTable.value +
+              "` SET " +
+              sets.join(", ") +
+              "\nWHERE <条件>;";
+            focusTextarea();
+          }
+
+          function fillDelete() {
+            sql.value =
+              "DELETE FROM `" + selectedTable.value + "` WHERE <条件>;";
+            focusTextarea();
+          }
 
           function loadFavorites() {
             try {
@@ -595,6 +897,7 @@
           }
 
           fetchDbInfo();
+          loadTables();
 
           async function toggleProcDropdown() {
             procDropdownOpen.value = !procDropdownOpen.value;
@@ -621,6 +924,8 @@
           }
 
           async function selectProcedure(name) {
+            const ta = document.querySelector("textarea");
+            if (ta) ta.focus();
             try {
               const res = await fetch(
                 "/api/procedures/" + encodeURIComponent(name) + "/params",
@@ -642,10 +947,15 @@
             }
             procDropdownOpen.value = false;
             procSearch.value = "";
-            nextTick(() => {
-              const ta = document.querySelector("textarea");
-              if (ta) ta.focus();
-            });
+            if (sql.value.includes("<") && ta) {
+              requestAnimationFrame(() => {
+                const idx = sql.value.indexOf("<");
+                ta.selectionStart = idx;
+                ta.selectionEnd = sql.value.indexOf(">", idx) + 1;
+              });
+            } else if (ta) {
+              ta.blur();
+            }
           }
 
           function generateRandom() {
@@ -684,6 +994,8 @@
               result.value = data;
 
               if (data.success) {
+                loadTables();
+                tableListView.value = "list";
                 if (sql.value.trim().toUpperCase().startsWith("USE ")) {
                   fetchDbInfo();
                 }
@@ -724,10 +1036,6 @@
 
           function clearSql() {
             sql.value = "";
-            nextTick(() => {
-              const ta = document.querySelector("textarea");
-              if (ta) ta.focus();
-            });
           }
 
           function escapeCsvCell(cell) {
@@ -869,6 +1177,18 @@
             copyAsMarkdown,
             downloadCsv,
             copyToast,
+            tableList,
+            tablesLoading,
+            tableListView,
+            selectedTable,
+            tableDetailColumns,
+            tableDetailRows,
+            tableDetailLoading,
+            openTableDetail,
+            fillSelect,
+            fillInsert,
+            fillUpdate,
+            fillDelete,
           };
         },
       }).mount("#app");

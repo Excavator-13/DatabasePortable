@@ -73,6 +73,18 @@ async def validate_sql(body: SqlRequest):
     return result
 
 
+@app.get("/api/tables")
+async def get_tables():
+    tables = await db.get_tables()
+    return {"tables": tables}
+
+
+@app.get("/api/tables/{name}/desc")
+async def describe_table(name: str):
+    result = await db.describe_table(name)
+    return result
+
+
 @app.get("/api/procedures")
 async def get_procedures():
     procedures = await db.get_procedures()

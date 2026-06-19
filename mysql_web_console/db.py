@@ -71,6 +71,46 @@ async def get_current_db() -> str | None:
         return None
 
 
+async def get_tables() -> list[str]:
+    if _pool is None:
+        return []
+    try:
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute("SHOW TABLES")
+                rows = await cursor.fetchall()
+                return [row[0] for row in rows]
+    except Exception:
+        return []
+
+
+async def describe_table(table_name: str) -> dict:
+    empty_result = {
+        "success": False,
+        "message": "",
+        "columns": [],
+        "rows": [],
+    }
+    if _pool is None:
+        empty_result["message"] = "数据库连接池未初始化"
+        return empty_result
+    try:
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(f"DESC `{table_name}`")
+                columns = [desc[0] for desc in cursor.description]
+                rows = [list(row) for row in await cursor.fetchall()]
+                return {
+                    "success": True,
+                    "message": "查询成功",
+                    "columns": columns,
+                    "rows": rows,
+                }
+    except Exception as e:
+        empty_result["message"] = str(e)
+        return empty_result
+
+
 async def get_procedures() -> list[str]:
     if _pool is None:
         return []
