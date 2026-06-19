@@ -1,5 +1,7 @@
 # 数据库连接池管理与 SQL 执行逻辑
 # 负责连接池的创建/销毁、SQL 类型判定、单语句安全检查以及执行结果的统一封装
+from __future__ import annotations
+
 import time
 
 import aiomysql
