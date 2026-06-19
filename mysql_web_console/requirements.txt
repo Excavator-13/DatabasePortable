@@ -2,3 +2,4 @@ fastapi
 uvicorn
 aiomysql
 python-dotenv
+cryptography
