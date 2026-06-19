@@ -184,9 +184,22 @@
           : 'bg-red-900/50 border border-red-700 text-red-300'"
         >
           <template v-if="result.success">
-            <template v-if="result.columns && result.columns.length > 0">
+            <template
+              v-if="result.columns && result.columns.length > 0 && result.out_params && result.out_params.length > 0"
+            >
+              查询成功，共返回 {{ result.rows.length }} 行，{{
+              result.out_params.length }} 个 OUT 参数，耗时 {{
+              result.duration_ms }} ms
+            </template>
+            <template v-else-if="result.columns && result.columns.length > 0">
               查询成功，耗时 {{ result.duration_ms }} ms，共 {{
               result.rows.length }} 行
+            </template>
+            <template
+              v-else-if="result.out_params && result.out_params.length > 0"
+            >
+              执行成功，返回 {{ result.out_params.length }} 个 OUT 参数，耗时 {{
+              result.duration_ms }} ms
             </template>
             <template v-else>
               执行成功，影响 {{ result.affected_rows }} 行，耗时 {{
@@ -238,6 +251,50 @@
               </tr>
             </tbody>
           </table>
+        </div>
+
+        <div
+          v-if="result.out_params && result.out_params.length > 0"
+          class="mt-4"
+        >
+          <div class="text-sm font-semibold text-amber-400 mb-2">OUT 参数</div>
+          <div class="overflow-x-auto rounded-lg border border-amber-800/50">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-amber-900/30">
+                  <th
+                    class="px-4 py-2 text-left font-bold whitespace-nowrap text-amber-300"
+                  >
+                    参数名
+                  </th>
+                  <th
+                    class="px-4 py-2 text-left font-bold whitespace-nowrap text-amber-300"
+                  >
+                    值
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="(param, index) in result.out_params"
+                  :key="index"
+                  :class="index % 2 === 0 ? 'bg-gray-800' : 'bg-gray-800/50'"
+                >
+                  <td class="px-4 py-2 whitespace-nowrap text-amber-200">
+                    {{ param.name }}
+                  </td>
+                  <td class="px-4 py-2 whitespace-nowrap">
+                    <span
+                      v-if="param.value === null"
+                      class="text-gray-500 italic"
+                      >NULL</span
+                    >
+                    <span v-else>{{ param.value }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
 
@@ -373,7 +430,9 @@
                 sql.value = "CALL " + name + "();";
               } else {
                 const args = params.map((p) =>
-                  p.direction === "OUT" ? "@" + p.name : "<" + p.name + ">",
+                  p.direction === "OUT"
+                    ? "@" + p.name + "_auto"
+                    : "<" + p.name + ">",
                 );
                 sql.value = "CALL " + name + "(" + args.join(", ") + ");";
               }
@@ -445,6 +504,7 @@
                 columns: [],
                 rows: [],
                 affected_rows: 0,
+                out_params: [],
               };
             } finally {
               loading.value = false;

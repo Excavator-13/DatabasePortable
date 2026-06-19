@@ -51,6 +51,7 @@ async def execute_sql(body: SqlRequest):
                 "columns": [],
                 "rows": [],
                 "affected_rows": 0,
+                "out_params": [],
             }
         result = await db.execute_sql(body.sql)
         return result
@@ -62,6 +63,7 @@ async def execute_sql(body: SqlRequest):
             "columns": [],
             "rows": [],
             "affected_rows": 0,
+            "out_params": [],
         }
 
 

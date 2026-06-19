@@ -2,6 +2,7 @@
 # 负责连接池的创建/销毁、SQL 类型判定、单语句安全检查以及执行结果的统一封装
 from __future__ import annotations
 
+import re
 import time
 
 import aiomysql
@@ -53,6 +54,10 @@ def _check_single_statement(sql: str) -> str | None:
 
 
 # 查询当前连接使用的数据库名，通过 SELECT DATABASE() 获取
+def _parse_out_params(sql: str) -> list[str]:
+    return re.findall(r'@(\w+_auto)\b', sql, re.IGNORECASE)
+
+
 async def get_current_db() -> str | None:
     if _pool is None:
         return None
@@ -120,6 +125,7 @@ async def execute_sql(sql: str) -> dict:
         "columns": [],
         "rows": [],
         "affected_rows": 0,
+        "out_params": [],
     }
 
     # 空值检查
@@ -142,37 +148,94 @@ async def execute_sql(sql: str) -> dict:
 
     try:
         async with _pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(sql)
+            sql_upper = sql.strip().upper()
 
-                sql_upper = sql.strip().upper()
+            if sql_upper.startswith("CALL"):
+                async with conn.cursor() as cursor:
+                    await cursor.execute(sql)
 
-                # 查询语句：返回列名和数据行
-                if _is_query(sql_upper):
-                    columns = [desc[0] for desc in cursor.description] if cursor.description else []
-                    rows = [list(row) for row in await cursor.fetchall()]
-                    duration_ms = round((time.perf_counter() - start) * 1000, 1)
-                    return {
-                        "success": True,
-                        "message": f"查询成功，共返回 {len(rows)} 行数据",
-                        "duration_ms": duration_ms,
-                        "columns": columns,
-                        "rows": rows,
-                        "affected_rows": 0,
-                    }
-                # 非查询语句：返回受影响行数
+                    columns = []
+                    rows = []
+                    if cursor.description:
+                        columns = [desc[0] for desc in cursor.description]
+                        rows = [list(row) for row in await cursor.fetchall()]
+
+                    try:
+                        while await cursor.nextset():
+                            pass
+                    except Exception:
+                        pass
+
+                out_vars = _parse_out_params(sql)
+                out_params = []
+                if out_vars:
+                    async with conn.cursor() as out_cursor:
+                        select_parts = []
+                        for var in out_vars:
+                            original_name = var[:-5]
+                            select_parts.append(f"@{var} AS `{original_name}`")
+                        select_sql = "SELECT " + ", ".join(select_parts)
+                        await out_cursor.execute(select_sql)
+                        if out_cursor.description:
+                            out_row = await out_cursor.fetchone()
+                            if out_row:
+                                out_columns = [desc[0] for desc in out_cursor.description]
+                                for i, col in enumerate(out_columns):
+                                    out_params.append({"name": col, "value": out_row[i]})
+
+                duration_ms = round((time.perf_counter() - start) * 1000, 1)
+
+                has_result = len(columns) > 0
+                has_out = len(out_params) > 0
+                if has_result and has_out:
+                    message = f"查询成功，共返回 {len(rows)} 行，{len(out_params)} 个 OUT 参数"
+                elif has_result:
+                    message = f"查询成功，共返回 {len(rows)} 行数据"
+                elif has_out:
+                    message = f"执行成功，返回 {len(out_params)} 个 OUT 参数"
                 else:
-                    affected_rows = cursor.rowcount
-                    duration_ms = round((time.perf_counter() - start) * 1000, 1)
-                    return {
-                        "success": True,
-                        "message": "执行成功",
-                        "duration_ms": duration_ms,
-                        "columns": [],
-                        "rows": [],
-                        "affected_rows": affected_rows,
-                    }
-    # 捕获所有数据库异常，将错误信息格式化返回，避免服务崩溃
+                    message = "执行成功"
+
+                return {
+                    "success": True,
+                    "message": message,
+                    "duration_ms": duration_ms,
+                    "columns": columns,
+                    "rows": rows,
+                    "affected_rows": 0,
+                    "out_params": out_params,
+                }
+
+            else:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(sql)
+
+                    if _is_query(sql_upper):
+                        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+                        rows = [list(row) for row in await cursor.fetchall()]
+                        duration_ms = round((time.perf_counter() - start) * 1000, 1)
+                        return {
+                            "success": True,
+                            "message": f"查询成功，共返回 {len(rows)} 行数据",
+                            "duration_ms": duration_ms,
+                            "columns": columns,
+                            "rows": rows,
+                            "affected_rows": 0,
+                            "out_params": [],
+                        }
+                    else:
+                        affected_rows = cursor.rowcount
+                        duration_ms = round((time.perf_counter() - start) * 1000, 1)
+                        return {
+                            "success": True,
+                            "message": "执行成功",
+                            "duration_ms": duration_ms,
+                            "columns": [],
+                            "rows": [],
+                            "affected_rows": affected_rows,
+                            "out_params": [],
+                        }
+
     except Exception as e:
         return {
             "success": False,
@@ -181,4 +244,5 @@ async def execute_sql(sql: str) -> dict:
             "columns": [],
             "rows": [],
             "affected_rows": 0,
+            "out_params": [],
         }
