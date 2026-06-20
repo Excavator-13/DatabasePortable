@@ -16,6 +16,29 @@ if [ -f "$PID_FILE" ]; then
     rm -f "$PID_FILE"
 fi
 
+# 检测 MySQL 是否可达，不可达则尝试通过 brew services 启动
+if ! mysqladmin ping --silent 2>/dev/null; then
+    echo "MySQL 未运行，尝试启动..."
+    if command -v brew &>/dev/null; then
+        brew services start mysql
+        echo "等待 MySQL 就绪..."
+        for i in $(seq 1 30); do
+            if mysqladmin ping --silent 2>/dev/null; then
+                echo "MySQL 已启动"
+                break
+            fi
+            if [ "$i" -eq 30 ]; then
+                echo "MySQL 启动超时，请手动检查"
+                exit 1
+            fi
+            sleep 1
+        done
+    else
+        echo "未找到 brew，请手动启动 MySQL 后重试"
+        exit 1
+    fi
+fi
+
 source "$APP_DIR/venv/bin/activate"
 
 cd "$APP_DIR"
