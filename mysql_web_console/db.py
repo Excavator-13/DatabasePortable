@@ -58,6 +58,70 @@ def _parse_out_params(sql: str) -> list[str]:
     return re.findall(r'@(\w+_auto)\b', sql, re.IGNORECASE)
 
 
+def _parse_call_args(sql: str) -> tuple[str | None, list[str]]:
+    m = re.match(r'\s*CALL\s+(?:`[^`]+`\.)?(?:`([^`]+)`|(\w+))\s*\(', sql, re.IGNORECASE)
+    if not m:
+        return None, []
+    proc_name = m.group(1) or m.group(2)
+    paren_start = m.end() - 1
+    args = []
+    depth = 0
+    current = []
+    in_string = None
+    i = paren_start + 1
+    while i < len(sql):
+        ch = sql[i]
+        if in_string:
+            current.append(ch)
+            if ch == in_string:
+                if i + 1 < len(sql) and sql[i + 1] == in_string:
+                    current.append(sql[i + 1])
+                    i += 1
+                else:
+                    in_string = None
+        elif ch in ("'", '"'):
+            in_string = ch
+            current.append(ch)
+        elif ch == '(':
+            depth += 1
+            current.append(ch)
+        elif ch == ')':
+            if depth == 0:
+                arg = ''.join(current).strip()
+                if arg:
+                    args.append(arg)
+                break
+            depth -= 1
+            current.append(ch)
+        elif ch == ',' and depth == 0:
+            arg = ''.join(current).strip()
+            args.append(arg)
+            current = []
+        else:
+            current.append(ch)
+        i += 1
+    return proc_name, args
+
+
+async def _get_proc_params_on_conn(conn, proc_name: str) -> list[dict]:
+    async with conn.cursor() as cursor:
+        await cursor.execute("SELECT DATABASE()")
+        row = await cursor.fetchone()
+        current_db = row[0] if row else None
+        if not current_db:
+            return []
+        await cursor.execute(
+            "SELECT PARAMETER_NAME, PARAMETER_MODE "
+            "FROM information_schema.PARAMETERS "
+            "WHERE SPECIFIC_SCHEMA = %s AND SPECIFIC_NAME = %s "
+            "AND PARAMETER_MODE IS NOT NULL "
+            "ORDER BY ORDINAL_POSITION",
+            (current_db, proc_name),
+        )
+        rows = await cursor.fetchall()
+        return [{"name": row[0], "direction": row[1]} for row in rows]
+
+
 async def get_current_db() -> str | None:
     if _pool is None:
         return None
@@ -226,8 +290,34 @@ async def execute_sql(sql: str) -> dict:
             sql_upper = sql.strip().upper()
 
             if sql_upper.startswith("CALL"):
+                proc_name, call_args = _parse_call_args(sql)
+                inout_set_vars = []
+                actual_sql = sql
+
+                if proc_name and call_args:
+                    try:
+                        params_meta = await _get_proc_params_on_conn(conn, proc_name)
+                        if params_meta:
+                            modified_args = list(call_args)
+                            needs_set = False
+                            for idx, meta in enumerate(params_meta):
+                                if meta['direction'] == 'INOUT' and idx < len(call_args):
+                                    arg = call_args[idx].strip()
+                                    if not arg.startswith('@'):
+                                        var_name = f"@{meta['name']}_auto"
+                                        inout_set_vars.append((var_name, arg))
+                                        modified_args[idx] = var_name
+                                        needs_set = True
+                            if needs_set:
+                                actual_sql = f"CALL `{proc_name}`({', '.join(modified_args)})"
+                    except Exception:
+                        pass
+
                 async with conn.cursor() as cursor:
-                    await cursor.execute(sql)
+                    for var_name, value in inout_set_vars:
+                        await cursor.execute(f"SET {var_name} = {value}")
+
+                    await cursor.execute(actual_sql)
 
                     columns = []
                     rows = []
@@ -241,7 +331,7 @@ async def execute_sql(sql: str) -> dict:
                     except Exception:
                         pass
 
-                out_vars = _parse_out_params(sql)
+                out_vars = _parse_out_params(actual_sql)
                 out_params = []
                 if out_vars:
                     async with conn.cursor() as out_cursor:

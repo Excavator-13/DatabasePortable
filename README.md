@@ -6,7 +6,7 @@
 
 - 📱 移动端优先的暗色模式 UI
 - 🗄️ 数据库表列表面板，点击查看表结构（DESC），一键生成 SELECT / INSERT / UPDATE / DELETE 骨架语句
-- 📞 浏览并快速生成 `CALL PROCEDURE` 语句（自动识别 IN/OUT 参数，OUT 参数自动查询并独立展示）
+- 📞 浏览并快速生成 `CALL PROCEDURE` 语句（自动识别 IN/OUT/INOUT 参数，OUT 参数自动查询并独立展示，INOUT 参数自动 SET 赋值并回读）
 - ⭐ SQL 收藏功能，支持搜索过滤与 localStorage 持久化，收藏前自动校验语法
 - ⇥ Tab 缩进按钮，方便手机端在 SQL 中插入缩进保持格式美观
 - ✕ 清空按钮，一键清空 SQL 输入框
@@ -214,10 +214,21 @@ ipconfig
 {
   "params": [
     { "name": "user_id", "type": "int", "direction": "IN" },
-    { "name": "result", "type": "int", "direction": "OUT" }
+    { "name": "result", "type": "int", "direction": "OUT" },
+    { "name": "counter", "type": "int", "direction": "INOUT" }
   ]
 }
 ```
+
+### Procedure 参数处理机制
+
+| 参数方向 | 生成格式         | 执行行为                                                                                            |
+| -------- | ---------------- | --------------------------------------------------------------------------------------------------- |
+| IN       | `<参数名>`       | 用户填入值，直接传入                                                                                |
+| OUT      | `@参数名_auto`   | 自动生成会话变量，执行后 SELECT 回读                                                                |
+| INOUT    | `<@参数名_auto>` | 用户填入值（如 `100`），后端自动 `SET @参数名_auto = 100` → `CALL proc(@参数名_auto)` → SELECT 回读 |
+
+**INOUT 执行流程**：用户输入 `CALL proc(100)`，后端识别 INOUT 参数后，在同一连接内依次执行 `SET @counter_auto = 100`、`CALL proc(@counter_auto)`、`SELECT @counter_auto`，实现传入初值并回读返回值。
 
 ## 安全说明
 

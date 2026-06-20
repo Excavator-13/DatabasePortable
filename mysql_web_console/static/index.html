@@ -935,11 +935,11 @@
               if (params.length === 0) {
                 sql.value = "CALL " + name + "();";
               } else {
-                const args = params.map((p) =>
-                  p.direction === "OUT"
-                    ? "@" + p.name + "_auto"
-                    : "<" + p.name + ">",
-                );
+                const args = params.map((p) => {
+                  if (p.direction === "OUT") return "@" + p.name + "_auto";
+                  if (p.direction === "INOUT") return "<@" + p.name + "_auto>";
+                  return "<" + p.name + ">";
+                });
                 sql.value = "CALL " + name + "(" + args.join(", ") + ");";
               }
             } catch (e) {
