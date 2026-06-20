@@ -27,14 +27,17 @@
 ## 项目结构
 
 ```
-mysql_web_console/
-├── main.py              # FastAPI 应用入口及路由
-├── db.py                # 数据库连接池与执行逻辑
-├── config.py            # 读取 .env 配置
-├── .env.example         # 环境变量示例
-├── requirements.txt     # Python 依赖
-└── static/
-    └── index.html       # 移动端优先的单页前端
+DatabasePortable/
+├── start.sh                     # 一键启动脚本（后台守护模式）
+├── stop.sh                      # 一键停止脚本
+├── mysql_web_console/
+│   ├── main.py                  # FastAPI 应用入口及路由
+│   ├── db.py                    # 数据库连接池与执行逻辑
+│   ├── config.py                # 读取 .env 配置
+│   ├── .env.example             # 环境变量示例
+│   ├── requirements.txt         # Python 依赖
+│   └── static/
+│       └── index.html           # 移动端优先的单页前端
 ```
 
 ## 快速开始
@@ -70,16 +73,30 @@ DB_PASSWORD=你的密码
 DB_NAME=你的数据库名
 ```
 
-### 4. 启动项目
+### 4. 启动与停止
+
+#### 日常使用（推荐）
+
+使用项目根目录的脚本，一键后台启动 / 停止：
 
 ```bash
+# 启动服务（后台运行，自动激活虚拟环境）
+./start.sh
+
+# 停止服务（优雅停止，超时后强制终止）
+./stop.sh
+```
+
+启动成功后终端会显示 PID 和访问地址，日志输出到 `mysql_web_console/app.log`。
+
+#### 开发调试
+
+如需前台运行（可实时查看日志输出，Ctrl+C 停止）：
+
+```bash
+cd mysql_web_console
+source venv/bin/activate
 python main.py
-```
-
-终端将显示：
-
-```
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
 ```
 
 ### 5. 在手机上访问

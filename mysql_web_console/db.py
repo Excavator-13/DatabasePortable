@@ -39,7 +39,7 @@ async def close_pool():
 # 判断 SQL 是否为查询语句（SELECT/SHOW/DESC/EXPLAIN）
 # 查询语句使用 fetchall 获取数据，非查询语句使用 rowcount 获取影响行数
 def _is_query(sql_stripped_upper: str) -> bool:
-    return sql_stripped_upper.startswith(_QUERY_PREFIXES)
+    return sql_stripped_upper.lstrip().startswith(_QUERY_PREFIXES)
 
 
 # 单语句安全检查：防止批量执行多条 SQL

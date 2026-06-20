@@ -31,6 +31,7 @@ wheels/
 *.db
 *.log
 logs/
+.uvicorn.pid
 
 # === 编辑器 / IDE 配置 ===
 .vscode/
