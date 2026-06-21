@@ -25,6 +25,105 @@ async def init_pool():
         minsize=1,
         maxsize=5,
     )
+    await init_favorites_table()
+
+
+async def init_favorites_table():
+    if _pool is None:
+        return
+    try:
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "CREATE TABLE IF NOT EXISTS `__sql_favorites` ("
+                    "`id` INT AUTO_INCREMENT PRIMARY KEY, "
+                    "`name` VARCHAR(100) NOT NULL, "
+                    "`sql` TEXT NOT NULL, "
+                    "`created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                    ")"
+                )
+    except Exception:
+        pass
+
+
+async def get_favorites() -> list[dict]:
+    if _pool is None:
+        return []
+    try:
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT `id`, `name`, `sql`, `created_at` "
+                    "FROM `__sql_favorites` ORDER BY `created_at` DESC"
+                )
+                rows = await cursor.fetchall()
+                return [
+                    {"id": row[0], "name": row[1], "sql": row[2], "created_at": str(row[3])}
+                    for row in rows
+                ]
+    except Exception:
+        return []
+
+
+async def add_favorite(name: str, sql_str: str) -> dict | None:
+    if _pool is None:
+        return None
+    try:
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "INSERT INTO `__sql_favorites` (`name`, `sql`) VALUES (%s, %s)",
+                    (name, sql_str),
+                )
+                fav_id = cursor.lastrowid
+                await cursor.execute(
+                    "SELECT `id`, `name`, `sql`, `created_at` "
+                    "FROM `__sql_favorites` WHERE `id` = %s",
+                    (fav_id,),
+                )
+                row = await cursor.fetchone()
+                if row:
+                    return {"id": row[0], "name": row[1], "sql": row[2], "created_at": str(row[3])}
+                return None
+    except Exception:
+        return None
+
+
+async def remove_favorite(fav_id: int) -> bool:
+    if _pool is None:
+        return False
+    try:
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "DELETE FROM `__sql_favorites` WHERE `id` = %s",
+                    (fav_id,),
+                )
+                return cursor.rowcount > 0
+    except Exception:
+        return False
+
+
+async def search_favorites(keyword: str) -> list[dict]:
+    if _pool is None:
+        return []
+    try:
+        async with _pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    "SELECT `id`, `name`, `sql`, `created_at` "
+                    "FROM `__sql_favorites` "
+                    "WHERE `name` LIKE %s OR `sql` LIKE %s "
+                    "ORDER BY `created_at` DESC",
+                    (f"%{keyword}%", f"%{keyword}%"),
+                )
+                rows = await cursor.fetchall()
+                return [
+                    {"id": row[0], "name": row[1], "sql": row[2], "created_at": str(row[3])}
+                    for row in rows
+                ]
+    except Exception:
+        return []
 
 
 # 关闭连接池，应用关闭时调用
@@ -143,7 +242,7 @@ async def get_tables() -> list[str]:
             async with conn.cursor() as cursor:
                 await cursor.execute("SHOW TABLES")
                 rows = await cursor.fetchall()
-                return [row[0] for row in rows]
+                return [row[0] for row in rows if not row[0].startswith("__sql_")]
     except Exception:
         return []
 

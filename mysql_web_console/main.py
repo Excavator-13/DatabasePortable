@@ -25,6 +25,11 @@ class SqlRequest(BaseModel):
     sql: str
 
 
+class FavoriteRequest(BaseModel):
+    name: str
+    sql: str
+
+
 # 根路由：返回前端单页应用页面
 @app.get("/")
 async def root():
@@ -95,6 +100,44 @@ async def get_procedures():
 async def get_procedure_params(name: str):
     params = await db.get_procedure_params(name)
     return {"params": params}
+
+
+@app.get("/api/favorites")
+async def get_favorites():
+    favorites = await db.get_favorites()
+    return {"favorites": favorites}
+
+
+@app.post("/api/favorites")
+async def create_favorite(body: FavoriteRequest):
+    if not body.name.strip():
+        return {"success": False, "message": "收藏命名不能为空"}
+    if not body.sql.strip():
+        return {"success": False, "message": "SQL 语句不能为空"}
+    validation = await db.validate_sql(body.sql)
+    if not validation.get("valid"):
+        return {"success": False, "message": "收藏失败：" + validation.get("message", "SQL 校验未通过")}
+    fav = await db.add_favorite(body.name.strip(), body.sql.strip())
+    if fav is None:
+        return {"success": False, "message": "收藏失败，请稍后重试"}
+    return {"success": True, "favorite": fav}
+
+
+@app.delete("/api/favorites/{fav_id}")
+async def delete_favorite(fav_id: int):
+    removed = await db.remove_favorite(fav_id)
+    if removed:
+        return {"success": True}
+    return {"success": False, "message": "收藏不存在或已删除"}
+
+
+@app.get("/api/favorites/search")
+async def search_favorites(keyword: str = ""):
+    if not keyword.strip():
+        favorites = await db.get_favorites()
+        return {"favorites": favorites}
+    favorites = await db.search_favorites(keyword.strip())
+    return {"favorites": favorites}
 
 
 # 挂载静态文件目录，需放在路由定义之后，避免拦截 /api 等路由

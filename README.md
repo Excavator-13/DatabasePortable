@@ -7,8 +7,9 @@
 - 📱 移动端优先的暗色模式 UI
 - 🗄️ 数据库表列表面板，点击查看表结构（DESC），一键生成 SELECT / INSERT / UPDATE / DELETE 骨架语句
 - 📞 浏览并快速生成 `CALL PROCEDURE` 语句（自动识别 IN/OUT/INOUT 参数，OUT 参数自动查询并独立展示，INOUT 参数自动 SET 赋值并回读）
-- ⭐ SQL 收藏功能，支持搜索过滤与 localStorage 持久化，收藏前自动校验语法
+- ⭐ SQL 收藏功能，支持命名收藏，收藏数据持久化到 MySQL，支持按命名和 SQL 搜索过滤，收藏前自动校验语法
 - ⇥ Tab 缩进按钮，方便手机端在 SQL 中插入缩进保持格式美观
+- ' ' 引号按钮，在光标处插入单引号对并自动选中中间位置，方便输入字符串值
 - ✕ 清空按钮，一键清空 SQL 输入框
 - 📊 查询结果表格展示，支持横向滚动与斑马纹
 - 📋 结果导出：复制 Markdown 表格 / 下载 CSV（支持 SELECT 结果集与 OUT 参数表）
@@ -102,7 +103,10 @@ python main.py
 ### 5. 在手机上访问
 
 1. 确保手机和电脑连接**同一 Wi-Fi**
-2. 在电脑终端查看局域网 IP：
+2. 启动服务后，终端会自动显示局域网访问地址（如 `http://192.168.1.x:8000`）
+3. 在手机浏览器输入该地址即可访问
+
+如需手动查看局域网 IP：
 
 ```bash
 # macOS
@@ -112,8 +116,6 @@ hostname -I
 # Windows
 ipconfig
 ```
-
-3. 在手机浏览器输入：`http://<你的局域网IP>:8000`
 
 ## API 接口
 
@@ -233,6 +235,85 @@ ipconfig
     { "name": "user_id", "type": "int", "direction": "IN" },
     { "name": "result", "type": "int", "direction": "OUT" },
     { "name": "counter", "type": "int", "direction": "INOUT" }
+  ]
+}
+```
+
+### 获取所有收藏
+
+`GET /api/favorites`
+
+**响应体**：
+
+```json
+{
+  "favorites": [
+    {
+      "id": 1,
+      "name": "查询用户",
+      "sql": "SELECT * FROM users LIMIT 10;",
+      "created_at": "2026-06-21 12:00:00"
+    }
+  ]
+}
+```
+
+### 新增收藏
+
+`POST /api/favorites`
+
+**请求体**：
+
+```json
+{
+  "name": "查询用户",
+  "sql": "SELECT * FROM users LIMIT 10;"
+}
+```
+
+**响应体**：
+
+```json
+{
+  "success": true,
+  "favorite": {
+    "id": 1,
+    "name": "查询用户",
+    "sql": "SELECT * FROM users LIMIT 10;",
+    "created_at": "2026-06-21 12:00:00"
+  }
+}
+```
+
+### 删除收藏
+
+`DELETE /api/favorites/{id}`
+
+**响应体**：
+
+```json
+{
+  "success": true
+}
+```
+
+### 搜索收藏
+
+`GET /api/favorites/search?keyword=用户`
+
+按命名或 SQL 内容模糊搜索。
+
+**响应体**：
+
+```json
+{
+  "favorites": [
+    {
+      "id": 1,
+      "name": "查询用户",
+      "sql": "SELECT * FROM users LIMIT 10;",
+      "created_at": "2026-06-21 12:00:00"
+    }
   ]
 }
 ```

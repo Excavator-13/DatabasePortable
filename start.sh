@@ -50,8 +50,12 @@ sleep 1
 
 PID=$(cat "$PID_FILE")
 if kill -0 "$PID" 2>/dev/null; then
+    LAN_IP=$(ipconfig getifaddr en0 2>/dev/null || echo "")
     echo "服务启动成功 (PID: $PID)"
-    echo "访问地址: http://localhost:$PORT"
+    echo "本机访问: http://localhost:$PORT"
+    if [ -n "$LAN_IP" ]; then
+        echo "局域网访问: http://$LAN_IP:$PORT"
+    fi
     echo "日志文件: $APP_DIR/app.log"
 else
     echo "服务启动失败，请查看日志: $APP_DIR/app.log"

@@ -236,6 +236,14 @@
             ⇥ Tab
           </button>
           <button
+            @click="insertQuote"
+            @mousedown.prevent
+            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
+            title="在光标处插入引号"
+          >
+            ' '
+          </button>
+          <button
             @click="clearSql"
             @mousedown.prevent
             class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors focus:outline-none"
@@ -275,7 +283,7 @@
               <input
                 v-model="favSearch"
                 @click.stop
-                placeholder="搜索收藏的 SQL..."
+                placeholder="搜索收藏..."
                 class="bg-gray-700 border-b border-gray-600 px-3 py-2 text-sm w-full outline-none"
               />
               <div
@@ -283,12 +291,17 @@
                 :key="fav.id"
                 class="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-700 transition-colors border-b border-gray-700/50 last:border-b-0"
               >
-                <span
+                <div
                   @click="sql = fav.sql; favOpen = false; favSearch = ''"
-                  class="truncate cursor-pointer flex-1 mr-2"
+                  class="cursor-pointer flex-1 mr-2 min-w-0"
                 >
-                  {{ fav.sql }}
-                </span>
+                  <div class="text-yellow-300 truncate font-medium">
+                    {{ fav.name }}
+                  </div>
+                  <div class="text-gray-500 truncate text-xs mt-0.5">
+                    {{ fav.sql }}
+                  </div>
+                </div>
                 <button
                   @click.stop="removeFavorite(fav.id)"
                   @mousedown.prevent
@@ -310,6 +323,50 @@
               >
                 暂无收藏，点击 ⭐ 收藏 SQL
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="favNameDialog"
+          class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+          @click.self="favNameDialog = false"
+        >
+          <div
+            class="bg-gray-800 border border-gray-700 rounded-lg p-4 w-80 shadow-xl"
+            @click.stop
+          >
+            <div class="text-sm font-semibold text-gray-200 mb-3">
+              ⭐ 收藏 SQL
+            </div>
+            <input
+              v-model="favNameInput"
+              ref="favNameInputRef"
+              @keydown.enter="confirmFavorite"
+              @keydown.escape="favNameDialog = false"
+              placeholder="输入收藏命名..."
+              class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 mb-3"
+            />
+            <div class="text-gray-500 text-xs mb-3 truncate">
+              SQL: {{ favPendingSql }}
+            </div>
+            <div class="flex gap-2 justify-end">
+              <button
+                @click="favNameDialog = false"
+                @mousedown.prevent
+                class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1.5 rounded transition-colors"
+              >
+                取消
+              </button>
+              <button
+                @click="confirmFavorite"
+                @mousedown.prevent
+                :disabled="favLoading || !favNameInput.trim()"
+                class="text-sm px-3 py-1.5 rounded transition-colors"
+                :class="favLoading || !favNameInput.trim() ? 'bg-gray-600 cursor-not-allowed opacity-50' : 'bg-blue-600 hover:bg-blue-500 text-white'"
+              >
+                {{ favLoading ? '收藏中...' : '确认收藏' }}
+              </button>
             </div>
           </div>
         </div>
@@ -689,6 +746,9 @@
           const favSearch = ref("");
           const favLoading = ref(false);
           const favToast = ref(null);
+          const favNameDialog = ref(false);
+          const favNameInput = ref("");
+          const favPendingSql = ref("");
 
           const procList = ref([]);
           const procSearch = ref("");
@@ -722,8 +782,10 @@
           const filteredFavorites = computed(() => {
             const keyword = favSearch.value.trim().toLowerCase();
             if (!keyword) return favorites.value;
-            return favorites.value.filter((f) =>
-              f.sql.toLowerCase().includes(keyword),
+            return favorites.value.filter(
+              (f) =>
+                f.name.toLowerCase().includes(keyword) ||
+                f.sql.toLowerCase().includes(keyword),
             );
           });
 
@@ -815,35 +877,21 @@
             focusTextarea();
           }
 
-          function loadFavorites() {
+          async function loadFavorites() {
             try {
-              const raw = localStorage.getItem("sql_favorites");
-              if (raw) {
-                favorites.value = JSON.parse(raw);
-              }
+              const res = await fetch("/api/favorites");
+              const data = await res.json();
+              favorites.value = data.favorites || [];
             } catch (e) {
               favorites.value = [];
             }
           }
 
-          function saveFavorites() {
+          async function removeFavorite(id) {
             try {
-              localStorage.setItem(
-                "sql_favorites",
-                JSON.stringify(favorites.value),
-              );
+              await fetch("/api/favorites/" + id, { method: "DELETE" });
+              favorites.value = favorites.value.filter((f) => f.id !== id);
             } catch (e) {}
-          }
-
-          function addFavorite(sqlStr) {
-            const id = Date.now().toString(36);
-            favorites.value.unshift({ id, sql: sqlStr, createdAt: Date.now() });
-            saveFavorites();
-          }
-
-          function removeFavorite(id) {
-            favorites.value = favorites.value.filter((f) => f.id !== id);
-            saveFavorites();
           }
 
           function showFavToast(text, type) {
@@ -859,26 +907,39 @@
               showFavToast("请先输入 SQL 语句", "warn");
               return;
             }
-            if (favorites.value.some((f) => f.sql === sqlStr)) {
-              showFavToast("该 SQL 已收藏", "warn");
-              return;
-            }
+            favPendingSql.value = sqlStr;
+            favNameInput.value = "";
+            favNameDialog.value = true;
+            nextTick(() => {
+              const input =
+                document.querySelector('[ref="favNameInputRef"]') ||
+                document.querySelector(
+                  '.bg-gray-800 input[placeholder="输入收藏命名..."]',
+                );
+              if (input) input.focus();
+            });
+          }
+
+          async function confirmFavorite() {
+            const name = favNameInput.value.trim();
+            if (!name) return;
             favLoading.value = true;
             try {
-              const res = await fetch("/api/validate", {
+              const res = await fetch("/api/favorites", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sql: sqlStr }),
+                body: JSON.stringify({ name: name, sql: favPendingSql.value }),
               });
               const data = await res.json();
-              if (data.valid) {
-                addFavorite(sqlStr);
+              if (data.success) {
+                favorites.value.unshift(data.favorite);
+                favNameDialog.value = false;
                 showFavToast("⭐ 收藏成功", "success");
               } else {
-                showFavToast("收藏失败：" + data.message, "error");
+                showFavToast(data.message || "收藏失败", "error");
               }
             } catch (e) {
-              showFavToast("校验请求失败", "error");
+              showFavToast("收藏请求失败", "error");
             } finally {
               favLoading.value = false;
             }
@@ -1034,6 +1095,21 @@
             });
           }
 
+          function insertQuote() {
+            const ta = document.querySelector("textarea");
+            if (!ta) return;
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            const val = sql.value;
+            const inserted = "' '";
+            sql.value = val.substring(0, start) + inserted + val.substring(end);
+            nextTick(() => {
+              ta.selectionStart = start + 1;
+              ta.selectionEnd = start + 2;
+              ta.focus();
+            });
+          }
+
           function clearSql() {
             sql.value = "";
           }
@@ -1155,10 +1231,15 @@
             favSearch,
             favLoading,
             favToast,
+            favNameDialog,
+            favNameInput,
+            favPendingSql,
             filteredFavorites,
             handleFavorite,
+            confirmFavorite,
             removeFavorite,
             insertTab,
+            insertQuote,
             executeSql,
             onKeydown,
             procList,
