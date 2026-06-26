@@ -31,6 +31,7 @@ class SqlRequest(BaseModel):
 class FavoriteRequest(BaseModel):
     name: str
     sql: str
+    force: bool = False
 
 
 class LoginRequest(BaseModel):
@@ -187,9 +188,10 @@ async def create_favorite(body: FavoriteRequest):
         return {"success": False, "message": "收藏命名不能为空"}
     if not body.sql.strip():
         return {"success": False, "message": "SQL 语句不能为空"}
-    validation = await db.validate_sql(body.sql)
-    if not validation.get("valid"):
-        return {"success": False, "message": "收藏失败：" + validation.get("message", "SQL 校验未通过")}
+    if not body.force:
+        validation = await db.validate_sql(body.sql)
+        if not validation.get("valid"):
+            return {"success": False, "message": validation.get("message", "SQL 校验未通过"), "validation_error": True}
     fav = await db.add_favorite(body.name.strip(), body.sql.strip())
     if fav is None:
         return {"success": False, "message": "收藏失败，请稍后重试"}

@@ -5,9 +5,10 @@
 ## 功能特性
 
 - 📱 移动端优先的暗色模式 UI
+- 🔐 可选登录认证模式（`REQUIRE_LOGIN=true`），支持 Web 端输入连接信息登录、Token 鉴权、记住登录、退出登录
 - 🗄️ 数据库表列表面板，点击查看表结构（DESC），一键生成 SELECT / INSERT / UPDATE / DELETE 骨架语句
 - 📞 浏览并快速生成 `CALL PROCEDURE` 语句（自动识别 IN/OUT/INOUT 参数，OUT 参数自动查询并独立展示，INOUT 参数自动 SET 赋值并回读）
-- ⭐ SQL 收藏功能，支持命名收藏，收藏数据持久化到 MySQL，支持按命名和 SQL 搜索过滤，收藏前自动校验语法
+- ⭐ SQL 收藏功能，支持命名收藏，收藏数据持久化到 MySQL，支持按命名和 SQL 搜索过滤，收藏前自动校验语法，校验未通过时可选择强制收藏
 - ⇥ Tab 缩进按钮，方便手机端在 SQL 中插入缩进保持格式美观
 - ' ' 引号按钮，在光标处插入单引号对并自动选中中间位置，方便输入字符串值
 - ✕ 清空按钮，一键清空 SQL 输入框
@@ -21,7 +22,7 @@
 
 ## 技术栈
 
-- **后端**: Python 3.10+, FastAPI, Uvicorn, aiomysql
+- **后端**: Python 3.10+, FastAPI, Uvicorn, aiomysql, cryptography
 - **前端**: Vue 3 (CDN), Tailwind CSS (CDN)
 - **配置管理**: python-dotenv
 
@@ -72,7 +73,10 @@ DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=你的密码
 DB_NAME=你的数据库名
+REQUIRE_LOGIN=false
 ```
+
+> **登录认证模式**：将 `REQUIRE_LOGIN` 设为 `true` 时，应用启动后不会自动连接数据库，而是展示登录页面，用户在 Web 端输入 MySQL 连接信息后登录使用。设为 `false`（默认）时，应用启动时自动使用 `.env` 中的配置连接数据库，无需登录。
 
 ### 4. 启动与停止
 
@@ -118,6 +122,71 @@ ipconfig
 ```
 
 ## API 接口
+
+### 认证状态查询
+
+`GET /api/auth-status`
+
+无需认证即可访问。
+
+**响应体**：
+
+```json
+{
+  "require_login": true,
+  "authenticated": false
+}
+```
+
+### 登录
+
+`POST /api/login`
+
+无需认证即可访问。仅在 `REQUIRE_LOGIN=true` 模式下使用。
+
+**请求体**：
+
+```json
+{
+  "host": "127.0.0.1",
+  "port": 3306,
+  "user": "root",
+  "password": "your_password",
+  "db": "your_database"
+}
+```
+
+**响应体（成功）**：
+
+```json
+{
+  "success": true,
+  "token": "a1b2c3d4..."
+}
+```
+
+**响应体（失败）**：
+
+```json
+{
+  "success": false,
+  "message": "连接失败: ..."
+}
+```
+
+### 退出登录
+
+`POST /api/logout`
+
+需要 Bearer Token 认证。退出后 Token 失效，连接池销毁。
+
+**响应体**：
+
+```json
+{
+  "success": true
+}
+```
 
 ### 获取当前数据库
 
@@ -267,11 +336,14 @@ ipconfig
 ```json
 {
   "name": "查询用户",
-  "sql": "SELECT * FROM users LIMIT 10;"
+  "sql": "SELECT * FROM users LIMIT 10;",
+  "force": false
 }
 ```
 
-**响应体**：
+- `force`（可选，默认 `false`）：设为 `true` 时跳过 SQL 语法校验，强制收藏。当 `force=false` 且校验未通过时，响应中会包含 `validation_error: true`，前端可据此提示用户选择是否强制收藏。
+
+**响应体（成功）**：
 
 ```json
 {
@@ -282,6 +354,16 @@ ipconfig
     "sql": "SELECT * FROM users LIMIT 10;",
     "created_at": "2026-06-21 12:00:00"
   }
+}
+```
+
+**响应体（校验未通过）**：
+
+```json
+{
+  "success": false,
+  "message": "SQL 校验未通过: ...",
+  "validation_error": true
 }
 ```
 
@@ -334,4 +416,6 @@ ipconfig
 - 空值与纯空格输入会被拦截
 - SQL 校验接口对非 SELECT 语句使用事务回滚，不产生数据库副作用
 - 所有数据库异常均被捕获并格式化返回，不会导致服务崩溃
+- 支持 `REQUIRE_LOGIN` 登录认证模式：启用后所有 API 请求需携带 Bearer Token，Token 由服务端随机生成，连接断开后自动失效
+- 登录凭据仅用于直连 MySQL，不经过第三方服务
 - 本项目设计为局域网内使用，请勿暴露到公网

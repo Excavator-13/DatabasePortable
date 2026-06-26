@@ -170,35 +170,20 @@
       <template v-if="!loginView">
         <header class="mb-6">
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <div>
-                <h1 class="text-xl font-bold text-blue-400 tracking-wide">
-                  MySQL Web Console
-                </h1>
-                <p class="text-sm text-gray-500 mt-1">
-                  局域网移动端 SQL 控制台
-                </p>
-              </div>
+            <div>
+              <h1 class="text-xl font-bold text-blue-400 tracking-wide">
+                MySQL Web Console
+              </h1>
+              <p class="text-sm text-gray-500 mt-1">局域网移动端 SQL 控制台</p>
             </div>
-            <div class="flex items-center gap-2">
-              <div
-                v-if="currentDb"
-                class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm"
+            <div
+              v-if="currentDb"
+              class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm"
+            >
+              <span class="text-gray-400">DB:</span>
+              <span class="text-emerald-400 font-semibold ml-1"
+                >{{ currentDb }}</span
               >
-                <span class="text-gray-400">DB:</span>
-                <span class="text-emerald-400 font-semibold ml-1"
-                  >{{ currentDb }}</span
-                >
-              </div>
-              <button
-                v-if="isLoginMode"
-                @click="doLogout"
-                @mousedown.prevent
-                class="bg-gray-700 hover:bg-gray-600 text-xs px-3 py-1.5 rounded-lg transition-colors text-gray-300"
-                title="退出登录"
-              >
-                登出
-              </button>
             </div>
           </div>
         </header>
@@ -577,6 +562,13 @@
               <div class="text-gray-500 text-xs mb-3 truncate">
                 SQL: {{ favPendingSql }}
               </div>
+              <div
+                v-if="favValidationError"
+                class="bg-yellow-900/40 border border-yellow-700/60 text-yellow-300 text-xs rounded px-3 py-2 mb-3 break-all"
+              >
+                <span class="font-semibold">⚠ 校验未通过：</span>{{
+                favValidationError }}
+              </div>
               <div class="flex gap-2 justify-end">
                 <button
                   @click="favNameDialog = false"
@@ -586,7 +578,18 @@
                   取消
                 </button>
                 <button
-                  @click="confirmFavorite"
+                  v-if="favValidationError"
+                  @click="confirmFavorite(true)"
+                  @mousedown.prevent
+                  :disabled="favLoading || !favNameInput.trim()"
+                  class="text-sm px-3 py-1.5 rounded transition-colors"
+                  :class="favLoading || !favNameInput.trim() ? 'bg-gray-600 cursor-not-allowed opacity-50' : 'bg-yellow-600 hover:bg-yellow-500 text-white'"
+                >
+                  {{ favLoading ? '收藏中...' : '仍然收藏' }}
+                </button>
+                <button
+                  v-else
+                  @click="confirmFavorite(false)"
                   @mousedown.prevent
                   :disabled="favLoading || !favNameInput.trim()"
                   class="text-sm px-3 py-1.5 rounded transition-colors"
@@ -929,6 +932,28 @@
         >
           {{ favToast.text }}
         </div>
+
+        <button
+          v-if="isLoginMode"
+          @click="doLogout"
+          @mousedown.prevent
+          class="fixed bottom-4 right-4 w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 border border-gray-700 text-gray-500 hover:text-red-400 hover:border-red-700 transition-colors shadow-lg z-40"
+          title="退出登录"
+        >
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+            ></path>
+          </svg>
+        </button>
       </template>
     </div>
 
@@ -1107,11 +1132,22 @@
               await fetch("/api/logout", { method: "POST", headers });
             } catch (e) {}
             clearToken();
+            if (!rememberLogin.value) {
+              clearCredentials();
+            }
+            loginHost.value = "127.0.0.1";
+            loginPort.value = "3306";
+            loginUser.value = "root";
+            loginPassword.value = "";
+            loginDb.value = "";
+            rememberLogin.value = false;
             loginView.value = true;
             loginError.value = "";
             currentDb.value = null;
             tableList.value = [];
             result.value = null;
+            procList.value = [];
+            procLoaded.value = false;
           }
 
           const sql = ref("");
@@ -1126,6 +1162,7 @@
           const favNameDialog = ref(false);
           const favNameInput = ref("");
           const favPendingSql = ref("");
+          const favValidationError = ref("");
 
           const procList = ref([]);
           const procSearch = ref("");
@@ -1171,8 +1208,6 @@
             const favCount = filteredFavorites.value.length;
             const procCount = filteredProcList.value.length;
             if (favCount === 0 && procCount === 0) return 1;
-            if (favCount === 0) return 0;
-            if (procCount === 0) return 1;
             return Math.max(favCount, 3);
           });
 
@@ -1180,8 +1215,6 @@
             const favCount = filteredFavorites.value.length;
             const procCount = filteredProcList.value.length;
             if (favCount === 0 && procCount === 0) return 1;
-            if (favCount === 0) return 1;
-            if (procCount === 0) return 0;
             return Math.max(procCount, 3);
           });
 
@@ -1305,6 +1338,7 @@
             }
             favPendingSql.value = sqlStr;
             favNameInput.value = "";
+            favValidationError.value = "";
             favNameDialog.value = true;
             nextTick(() => {
               const input =
@@ -1316,7 +1350,7 @@
             });
           }
 
-          async function confirmFavorite() {
+          async function confirmFavorite(force = false) {
             const name = favNameInput.value.trim();
             if (!name) return;
             favLoading.value = true;
@@ -1324,13 +1358,20 @@
               const res = await authedFetch("/api/favorites", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name: name, sql: favPendingSql.value }),
+                body: JSON.stringify({
+                  name: name,
+                  sql: favPendingSql.value,
+                  force: force,
+                }),
               });
               const data = await res.json();
               if (data.success) {
                 favorites.value.unshift(data.favorite);
                 favNameDialog.value = false;
+                favValidationError.value = "";
                 showFavToast("⭐ 收藏成功", "success");
+              } else if (data.validation_error) {
+                favValidationError.value = data.message || "SQL 校验未通过";
               } else {
                 showFavToast(data.message || "收藏失败", "error");
               }
@@ -1639,6 +1680,7 @@
             favNameDialog,
             favNameInput,
             favPendingSql,
+            favValidationError,
             filteredFavorites,
             pickerView,
             pickerFavFlex,
