@@ -1,26 +1,29 @@
-# FastAPI 应用入口：定义路由、生命周期管理与静态文件服务
+import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import db
+from config import require_login
+
+_tokens: dict[str, None] = {}
 
 
-# 应用生命周期：启动时初始化数据库连接池，关闭时释放连接池
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await db.init_pool()
+    if not require_login:
+        await db.init_pool()
     yield
     await db.close_pool()
+    _tokens.clear()
 
 
 app = FastAPI(title="MySQL Web Console", lifespan=lifespan)
 
 
-# SQL 执行请求体模型，仅包含一个 sql 字段
 class SqlRequest(BaseModel):
     sql: str
 
@@ -30,21 +33,91 @@ class FavoriteRequest(BaseModel):
     sql: str
 
 
-# 根路由：返回前端单页应用页面
+class LoginRequest(BaseModel):
+    host: str
+    port: int
+    user: str
+    password: str
+    db: str
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if not require_login:
+        return await call_next(request)
+
+    path = request.url.path
+    public_paths = {"/", "/api/auth-status", "/api/login"}
+    if path in public_paths or path.startswith("/static"):
+        return await call_next(request)
+
+    if path.startswith("/api/"):
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+            if token in _tokens:
+                if not db.is_pool_ready():
+                    _tokens.pop(token, None)
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "连接已断开，请重新登录"},
+                    )
+                return await call_next(request)
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "未授权，请重新登录"},
+        )
+
+    return await call_next(request)
+
+
 @app.get("/")
 async def root():
     return FileResponse("static/index.html")
 
 
-# 数据库信息接口：返回当前使用的数据库名
+@app.get("/api/auth-status")
+async def auth_status():
+    return {
+        "require_login": require_login,
+        "authenticated": db.is_pool_ready(),
+    }
+
+
+@app.post("/api/login")
+async def login(body: LoginRequest):
+    config = {
+        "host": body.host,
+        "port": body.port,
+        "user": body.user,
+        "password": body.password,
+        "db": body.db,
+    }
+    try:
+        await db.init_pool_with_config(config)
+    except Exception as e:
+        return {"success": False, "message": f"连接失败: {str(e)}"}
+    token = secrets.token_hex(32)
+    _tokens[token] = None
+    return {"success": True, "token": token}
+
+
+@app.post("/api/logout")
+async def logout(request: Request):
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        _tokens.pop(token, None)
+    await db.destroy_pool()
+    return {"success": True}
+
+
 @app.get("/api/info")
 async def get_info():
     current_db = await db.get_current_db()
     return {"database": current_db}
 
 
-# 核心 SQL 执行接口：接收 SQL 语句，执行并返回结构化结果
-# 包含空值前置检查和全局异常兜底，确保不会抛出 500 错误
 @app.post("/api/execute")
 async def execute_sql(body: SqlRequest):
     try:
@@ -140,12 +213,10 @@ async def search_favorites(keyword: str = ""):
     return {"favorites": favorites}
 
 
-# 挂载静态文件目录，需放在路由定义之后，避免拦截 /api 等路由
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 if __name__ == "__main__":
     import uvicorn
 
-    # host 绑定 0.0.0.0 以允许局域网内其他设备访问
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -9,14 +9,11 @@ import aiomysql
 
 from config import db_config
 
-# 全局连接池实例，在 lifespan 启动时初始化
 _pool: aiomysql.Pool | None = None
 
-# 查询类 SQL 的前缀，这些语句需要使用 fetchall 获取结果集
 _QUERY_PREFIXES = ("SELECT", "SHOW", "DESC", "EXPLAIN")
 
 
-# 初始化连接池，应用启动时调用
 async def init_pool():
     global _pool
     _pool = await aiomysql.create_pool(
@@ -26,6 +23,29 @@ async def init_pool():
         maxsize=5,
     )
     await init_favorites_table()
+
+
+async def init_pool_with_config(config: dict):
+    global _pool
+    _pool = await aiomysql.create_pool(
+        **config,
+        autocommit=True,
+        minsize=1,
+        maxsize=5,
+    )
+    await init_favorites_table()
+
+
+def is_pool_ready() -> bool:
+    return _pool is not None
+
+
+async def destroy_pool():
+    global _pool
+    if _pool is not None:
+        _pool.close()
+        await _pool.wait_closed()
+        _pool = None
 
 
 async def init_favorites_table():
@@ -128,11 +148,7 @@ async def search_favorites(keyword: str) -> list[dict]:
 
 # 关闭连接池，应用关闭时调用
 async def close_pool():
-    global _pool
-    if _pool is not None:
-        _pool.close()
-        await _pool.wait_closed()
-        _pool = None
+    await destroy_pool()
 
 
 # 判断 SQL 是否为查询语句（SELECT/SHOW/DESC/EXPLAIN）
