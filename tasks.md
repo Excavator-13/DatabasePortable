@@ -1,136 +1,74 @@
-# SQL 收藏功能改造计划：localStorage → MySQL + 命名
+# 收藏 & PROC 合并选择页 开发计划
 
-## 目标
+## 概述
 
-将 SQL 收藏从浏览器 localStorage 迁移到 MySQL 持久化存储，并增加"命名"功能，
-收藏下拉列表显示命名而非 SQL 本身。
-
-## 原则
-
-- 不影响现有功能（SQL 执行、表浏览、Procedure 调用、随机数等）
-- 保持现有代码风格和架构模式
-- 前后端改动最小化
+将「⭐ 收藏」和「CALL PROC」两个独立下拉合并为一个按钮，点击后进入全屏选择页面。页面内上方为收藏列表，下方为 PROC 列表，按条目数量动态分配空间（较窄者不小于 3 条高度）。点击条目后自动返回主页并填入 SQL。
 
 ---
 
-## Task 1：db.py — 新增收藏表初始化与 CRUD 函数
+## Phase 1：状态与数据准备
 
-### 1.1 新增 `init_favorites_table()` 函数
+- [x] 1.1 新增 Vue data 属性 `pickerView: false`，控制选择页的显示/隐藏
+- [x] 1.2 确认 `favorites`、`filteredFavorites`、`favSearch`、`procList`、`filteredProcList`、`procSearch` 等数据属性已存在且可用
+- [x] 1.3 新增 computed 属性 `pickerFavFlex` 和 `pickerProcFlex`，根据条目数量计算两区域 flex 比例：
+  - 按条目数比例分配
+  - 较窄区域最小高度 = 3 条 × 条目行高（约 44px），即 flex 最小值不低于 3 对应的比例
+  - 若某列表为空，另一列表占满（保留空状态提示的最小高度）
 
-- 在 `init_pool()` 之后自动调用
-- 建表语句：
-  ```sql
-  CREATE TABLE IF NOT EXISTS __sql_favorites (
-      id         INT AUTO_INCREMENT PRIMARY KEY,
-      name       VARCHAR(100) NOT NULL,
-      sql        TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-  )
+## Phase 2：合并入口按钮
+
+- [x] 2.1 将原来两行的「⭐ 收藏」按钮和「CALL PROC」按钮替换为单个按钮，文案如「📋 收藏 / PROC」
+  - 样式与现有下拉按钮保持一致
+  - 点击后设置 `pickerView = true`
+- [x] 2.2 删除原来的两行下拉按钮 HTML（收藏下拉、PROC 下拉）
+- [x] 2.3 删除 `favOpen`、`procDropdownOpen` 相关的下拉开关逻辑（保留数据本身）
+
+## Phase 3：选择页面 UI
+
+- [x] 3.1 页面结构（全屏覆盖，与现有 favNameDialog 的 fixed 模式一致）：
   ```
-- 使用 `IF NOT EXISTS` 确保幂等，不影响用户已有数据
+  fixed inset-0 bg-gray-900 z-40
+  ├── 顶部导航栏：返回按钮 + 标题「收藏 & Procedure」
+  ├── 收藏区域（flex 动态高度）
+  │   ├── Section 标题 + 搜索框
+  │   └── 条目列表（独立滚动）
+  ├── PROC 区域（flex 动态高度）
+  │   ├── Section 标题 + 搜索框
+  │   └── 条目列表（独立滚动）
+  ```
+- [x] 3.2 顶部导航栏：
+  - 左侧返回按钮「← 返回」，点击 `pickerView = false`
+  - 中间标题
+  - 与主页 header 风格统一
+- [x] 3.3 收藏区域：
+  - Section 标题「⭐ 收藏」+ 条目计数
+  - 搜索框（绑定 favSearch，与现有一致）
+  - 条目列表：每条显示名称 + SQL 预览，右侧删除按钮（与现有一致）
+  - 点击条目 → `sql = fav.sql; pickerView = false; favSearch = ''`
+  - 空状态提示与现有一致
+- [x] 3.4 PROC 区域：
+  - Section 标题「CALL PROC」+ 条目计数
+  - 搜索框（绑定 procSearch，与现有一致）
+  - 条目列表：每条显示 procedure 名称（与现有一致）
+  - 点击条目 → 调用 `selectProcedure(name)` 并 `pickerView = false`
+  - 空状态提示与现有一致
+- [x] 3.5 高度分配逻辑：
+  - 两区域使用 flex 布局，通过 `flex` 值动态分配
+  - 各区域内部列表 `overflow-y: auto` 独立滚动
+  - 较窄区域最小高度保证 3 条目可滚动
 
-### 1.2 新增收藏 CRUD 函数
+## Phase 4：交互细节
 
-- `get_favorites() -> list[dict]` — 查询所有收藏，按 created_at 倒序
-- `add_favorite(name: str, sql: str) -> dict` — 新增收藏，返回新增记录
-- `remove_favorite(fav_id: int) -> bool` — 按 id 删除收藏
-- `search_favorites(keyword: str) -> list[dict]` — 按命名或 SQL 模糊搜索
+- [x] 4.1 进入选择页时，自动聚焦收藏搜索框（方便快速筛选）
+- [x] 4.2 选择条目后清空搜索词，避免下次进入残留
+- [x] 4.3 返回时同样清空搜索词
+- [x] 4.4 收藏删除操作留在选择页内完成，不跳转（与现有一致）
+- [x] 4.5 favNameDialog（收藏命名弹窗）仍从 textarea 旁的星号按钮触发，不受影响
 
-### 1.3 在 `init_pool()` 末尾调用 `init_favorites_table()`
+## Phase 5：清理与验证
 
-**涉及文件**：`mysql_web_console/db.py`
-
----
-
-## Task 2：main.py — 新增收藏 API 路由
-
-### 2.1 新增请求体模型
-
-- `FavoriteRequest`：含 `name` 和 `sql` 两个字段
-
-### 2.2 新增 API 端点
-
-| 方法   | 路径                                | 功能               |
-| ------ | ----------------------------------- | ------------------ |
-| GET    | `/api/favorites`                    | 获取所有收藏       |
-| POST   | `/api/favorites`                    | 新增收藏（含命名） |
-| DELETE | `/api/favorites/{id}`               | 删除收藏           |
-| GET    | `/api/favorites/search?keyword=xxx` | 搜索收藏           |
-
-### 2.3 新增收藏时保留 SQL 校验
-
-- 复用现有 `db.validate_sql()` 校验语法
-- 校验通过后再存入
-
-**涉及文件**：`mysql_web_console/main.py`
-
----
-
-## Task 3：index.html — 前端改造
-
-### 3.1 移除 localStorage 相关逻辑
-
-- 删除 `loadFavorites()`、`saveFavorites()` 函数
-- 删除 `localStorage.getItem/setItem` 调用
-
-### 3.2 改造收藏交互流程
-
-- 点击 ⭐ 收藏按钮 → 弹出输入框让用户输入命名 → 提交到后端
-- 收藏下拉列表：显示命名（name），点击后将对应 SQL 填入输入框
-- 搜索过滤：同时匹配 name 和 sql
-
-### 3.3 改造 `handleFavorite()` 函数
-
-- 弹出命名输入（内联输入框或小型弹窗，不用 alert/prompt）
-- 调用 `POST /api/favorites` 提交 `{ name, sql }`
-
-### 3.4 改造 `loadFavorites()` → 改为从 API 加载
-
-- 页面初始化时调用 `GET /api/favorites`
-- 赋值给 `favorites` ref
-
-### 3.5 改造 `removeFavorite()`
-
-- 调用 `DELETE /api/favorites/{id}`
-
-### 3.6 改造 `filteredFavorites` 计算属性
-
-- 搜索同时匹配 `name` 和 `sql`
-
-### 3.7 收藏下拉列表 UI 调整
-
-- 每条收藏显示：命名（主文字）+ SQL 预览（次要文字，截断显示）
-- 保持现有暗色风格和交互模式
-
-**涉及文件**：`mysql_web_console/static/index.html`
-
----
-
-## Task 4：验证与清理
-
-### 4.1 功能验证清单
-
-- [x] 新增收藏（输入命名 + SQL）→ 成功存入 MySQL
-- [x] 收藏列表正确显示命名
-- [x] 点击收藏项 → SQL 正确填入输入框
-- [x] 搜索收藏 → 按命名和 SQL 均可匹配
-- [x] 删除收藏 → 从列表和数据库移除
-- [x] 重复 SQL 收藏 → 允许（不同命名即可）
-- [ ] SQL 执行功能不受影响
-- [ ] 表浏览功能不受影响
-- [ ] Procedure 调用功能不受影响
-- [ ] 随机数功能不受影响
-
-### 4.2 清理
-
-- [x] 移除所有 localStorage 相关代码
-- [x] 确认无残留的死代码
-
----
-
-## 风险与注意事项
-
-1. **建表位置**：`__sql_favorites` 表建在用户配置的数据库中，使用双下划线前缀避免与业务表冲突
-2. **并发安全**：收藏操作频率极低，无需加锁
-3. **向后兼容**：localStorage 中的旧收藏不会自动迁移（可后续加迁移逻辑，但非必须）
-4. **命名唯一性**：不强制命名唯一，允许不同收藏使用相同命名
+- [x] 5.1 删除不再使用的 `favOpen`、`procDropdownOpen` data 属性及相关逻辑
+- [x] 5.2 删除原来下拉菜单的 HTML 代码
+- [ ] 5.3 验证移动端布局：条目高度、滚动、返回、填入均正常
+- [ ] 5.4 验证桌面端布局：同样可用且美观
+- [ ] 5.5 验证边界情况：空收藏 + 空 PROC、仅一方有数据、搜索无结果

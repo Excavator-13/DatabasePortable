@@ -228,100 +228,150 @@
       <section class="mb-4">
         <div class="flex flex-wrap gap-2 mb-3">
           <button
-            @click="insertTab"
+            @click="openPicker"
             @mousedown.prevent
-            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
-            title="在光标处插入缩进"
+            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors inline-flex items-center gap-1 focus:outline-none"
           >
-            ⇥ Tab
-          </button>
-          <button
-            @click="insertQuote"
-            @mousedown.prevent
-            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
-            title="在光标处插入引号"
-          >
-            ' '
-          </button>
-          <button
-            @click="clearSql"
-            @mousedown.prevent
-            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors focus:outline-none"
-            title="清空输入框"
-          >
-            ✕ 清空
+            <span>📋 收藏 / PROC</span>
           </button>
         </div>
 
-        <div class="flex flex-wrap gap-2 mb-3">
-          <div class="relative">
+        <div
+          v-if="pickerView"
+          class="fixed inset-0 bg-gray-900 z-40 flex flex-col overflow-hidden"
+          style="overscroll-behavior: contain"
+        >
+          <div
+            class="flex items-center px-4 py-3 border-b border-gray-700 shrink-0"
+          >
             <button
-              @click.stop="favOpen = !favOpen; if (favOpen) procDropdownOpen = false"
+              @click="closePicker"
               @mousedown.prevent
-              class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors inline-flex items-center gap-1 focus:outline-none"
+              class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1"
             >
-              <span>⭐ 收藏</span>
-              <svg
-                class="w-3 h-3 transition-transform"
-                :class="{ 'rotate-180': favOpen }"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
+              ← 返回
             </button>
-            <div
-              v-if="favOpen"
-              class="absolute top-full left-0 mt-1 w-72 bg-gray-800 border border-gray-700 rounded shadow-lg z-10 max-h-60 overflow-y-auto"
+            <span class="text-base font-semibold text-gray-200 ml-3"
+              >收藏 &amp; Procedure</span
             >
-              <input
-                v-model="favSearch"
-                @click.stop
-                placeholder="搜索收藏..."
-                class="bg-gray-700 border-b border-gray-600 px-3 py-2 text-sm w-full outline-none"
-              />
+          </div>
+
+          <div class="flex flex-col flex-1 min-h-0">
+            <div
+              class="flex flex-col min-h-0 border-b-2 border-gray-500"
+              :style="{ flex: pickerFavFlex }"
+            >
+              <div class="flex items-center justify-between px-4 py-2 shrink-0">
+                <span class="text-sm font-semibold text-yellow-300"
+                  >⭐ 收藏
+                  <span class="text-gray-500 font-normal"
+                    >({{ filteredFavorites.length }})</span
+                  ></span
+                >
+              </div>
+              <div class="px-4 pb-2 shrink-0">
+                <input
+                  v-model="favSearch"
+                  ref="pickerFavSearchRef"
+                  placeholder="搜索收藏..."
+                  class="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm w-full outline-none focus:border-blue-500"
+                />
+              </div>
               <div
-                v-for="fav in filteredFavorites"
-                :key="fav.id"
-                class="flex items-center justify-between px-3 py-2 text-sm hover:bg-gray-700 transition-colors border-b border-gray-700/50 last:border-b-0"
+                class="flex-1 overflow-y-scroll min-h-0"
+                style="
+                  -webkit-overflow-scrolling: touch;
+                  overscroll-behavior-y: contain;
+                "
               >
                 <div
-                  @click="sql = fav.sql; favOpen = false; favSearch = ''"
-                  class="cursor-pointer flex-1 mr-2 min-w-0"
+                  v-for="fav in filteredFavorites"
+                  :key="fav.id"
+                  class="flex items-center justify-between px-4 py-2 text-sm hover:bg-gray-800 transition-colors border-b border-gray-700/50 last:border-b-0"
+                  style="min-height: 44px"
                 >
-                  <div class="text-yellow-300 truncate font-medium">
-                    {{ fav.name }}
+                  <div
+                    @click="sql = fav.sql; closePicker()"
+                    class="cursor-pointer flex-1 mr-2 min-w-0"
+                  >
+                    <div class="text-yellow-300 truncate font-medium">
+                      {{ fav.name }}
+                    </div>
+                    <div class="text-gray-500 truncate text-xs mt-0.5">
+                      {{ fav.sql }}
+                    </div>
                   </div>
-                  <div class="text-gray-500 truncate text-xs mt-0.5">
-                    {{ fav.sql }}
-                  </div>
+                  <button
+                    @click.stop="removeFavorite(fav.id)"
+                    @mousedown.prevent
+                    class="text-gray-500 hover:text-red-400 hover:bg-red-900/30 transition-colors shrink-0 ml-2 w-8 h-8 flex items-center justify-center rounded"
+                    title="删除收藏"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <button
-                  @click.stop="removeFavorite(fav.id)"
-                  @mousedown.prevent
-                  class="text-gray-500 hover:text-red-400 hover:bg-red-900/30 transition-colors shrink-0 ml-2 w-8 h-8 flex items-center justify-center rounded"
-                  title="删除收藏"
+                <div
+                  v-if="filteredFavorites.length === 0 && favorites.length > 0"
+                  class="text-gray-500 text-sm px-4 py-3"
                 >
-                  ✕
-                </button>
+                  无匹配结果
+                </div>
+                <div
+                  v-if="favorites.length === 0"
+                  class="text-gray-500 text-sm px-4 py-3"
+                >
+                  暂无收藏，点击 ⭐ 收藏 SQL
+                </div>
+              </div>
+            </div>
+
+            <div
+              class="flex flex-col min-h-0"
+              :style="{ flex: pickerProcFlex }"
+            >
+              <div class="flex items-center justify-between px-4 py-2 shrink-0">
+                <span class="text-sm font-semibold text-emerald-400"
+                  >CALL PROC
+                  <span class="text-gray-500 font-normal"
+                    >({{ filteredProcList.length }})</span
+                  ></span
+                >
+              </div>
+              <div class="px-4 pb-2 shrink-0">
+                <input
+                  v-model="procSearch"
+                  placeholder="搜索 Procedure..."
+                  class="bg-gray-700 border border-gray-600 rounded px-3 py-1.5 text-sm w-full outline-none focus:border-blue-500"
+                />
               </div>
               <div
-                v-if="filteredFavorites.length === 0 && favorites.length > 0"
-                class="text-gray-500 text-sm px-3 py-2"
+                class="flex-1 overflow-y-scroll min-h-0"
+                style="
+                  -webkit-overflow-scrolling: touch;
+                  overscroll-behavior-y: contain;
+                "
               >
-                无匹配结果
-              </div>
-              <div
-                v-if="favorites.length === 0"
-                class="text-gray-500 text-sm px-3 py-2"
-              >
-                暂无收藏，点击 ⭐ 收藏 SQL
+                <div
+                  v-for="name in filteredProcList"
+                  :key="name"
+                  @click="selectProcedureFromPicker(name)"
+                  class="px-4 py-2 text-sm hover:bg-gray-800 transition-colors truncate border-b border-gray-700/50 last:border-b-0 cursor-pointer"
+                  style="min-height: 44px"
+                >
+                  {{ name }}
+                </div>
+                <div
+                  v-if="filteredProcList.length === 0 && procList.length > 0"
+                  class="text-gray-500 text-sm px-4 py-3"
+                >
+                  无匹配结果
+                </div>
+                <div
+                  v-if="procList.length === 0 && !procLoading"
+                  class="text-gray-500 text-sm px-4 py-3"
+                >
+                  当前数据库无 Procedure
+                </div>
               </div>
             </div>
           </div>
@@ -372,61 +422,30 @@
         </div>
 
         <div class="flex flex-wrap gap-2 mb-3">
-          <div class="relative">
-            <button
-              @click.stop="toggleProcDropdown"
-              @mousedown.prevent
-              class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors inline-flex items-center gap-1 focus:outline-none"
-            >
-              <span>CALL PROC</span>
-              <svg
-                class="w-3 h-3 transition-transform"
-                :class="{ 'rotate-180': procDropdownOpen }"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 9l-7 7-7-7"
-                />
-              </svg>
-            </button>
-            <div
-              v-if="procDropdownOpen"
-              class="absolute top-full left-0 mt-1 w-72 bg-gray-800 border border-gray-700 rounded shadow-lg z-10 max-h-60 overflow-y-auto"
-            >
-              <input
-                v-model="procSearch"
-                @click.stop
-                placeholder="搜索 Procedure..."
-                class="bg-gray-700 border-b border-gray-600 px-3 py-2 text-sm w-full outline-none"
-              />
-              <button
-                v-for="name in filteredProcList"
-                :key="name"
-                @click.stop="selectProcedure(name)"
-                @mousedown.prevent
-                class="block w-full text-left px-3 py-2 text-sm hover:bg-gray-700 transition-colors truncate border-b border-gray-700/50 last:border-b-0"
-              >
-                {{ name }}
-              </button>
-              <div
-                v-if="filteredProcList.length === 0 && procList.length > 0"
-                class="text-gray-500 text-sm px-3 py-2"
-              >
-                无匹配结果
-              </div>
-              <div
-                v-if="procList.length === 0 && !procLoading"
-                class="text-gray-500 text-sm px-3 py-2"
-              >
-                当前数据库无 Procedure
-              </div>
-            </div>
-          </div>
+          <button
+            @click="insertTab"
+            @mousedown.prevent
+            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
+            title="在光标处插入缩进"
+          >
+            ⇥ Tab
+          </button>
+          <button
+            @click="insertQuote"
+            @mousedown.prevent
+            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors"
+            title="在光标处插入引号"
+          >
+            ' '
+          </button>
+          <button
+            @click="clearSql"
+            @mousedown.prevent
+            class="bg-gray-700 hover:bg-gray-600 text-sm px-3 py-1 rounded transition-colors focus:outline-none ml-auto"
+            title="清空输入框"
+          >
+            ✕ 清空
+          </button>
         </div>
 
         <div class="relative">
@@ -742,7 +761,6 @@
           const currentDb = ref(null);
 
           const favorites = ref([]);
-          const favOpen = ref(false);
           const favSearch = ref("");
           const favLoading = ref(false);
           const favToast = ref(null);
@@ -752,9 +770,10 @@
 
           const procList = ref([]);
           const procSearch = ref("");
-          const procDropdownOpen = ref(false);
           const procLoading = ref(false);
           const procLoaded = ref(false);
+
+          const pickerView = ref(false);
 
           const randMax = ref("");
           const randResult = ref(null);
@@ -787,6 +806,24 @@
                 f.name.toLowerCase().includes(keyword) ||
                 f.sql.toLowerCase().includes(keyword),
             );
+          });
+
+          const pickerFavFlex = computed(() => {
+            const favCount = filteredFavorites.value.length;
+            const procCount = filteredProcList.value.length;
+            if (favCount === 0 && procCount === 0) return 1;
+            if (favCount === 0) return 0;
+            if (procCount === 0) return 1;
+            return Math.max(favCount, 3);
+          });
+
+          const pickerProcFlex = computed(() => {
+            const favCount = filteredFavorites.value.length;
+            const procCount = filteredProcList.value.length;
+            if (favCount === 0 && procCount === 0) return 1;
+            if (favCount === 0) return 1;
+            if (procCount === 0) return 0;
+            return Math.max(procCount, 3);
           });
 
           async function loadTables() {
@@ -960,14 +997,17 @@
           fetchDbInfo();
           loadTables();
 
-          async function toggleProcDropdown() {
-            procDropdownOpen.value = !procDropdownOpen.value;
-            if (procDropdownOpen.value) {
-              favOpen.value = false;
-              if (!procLoaded.value) {
-                await loadProcedures();
-              }
+          async function openPicker() {
+            pickerView.value = true;
+            if (!procLoaded.value) {
+              await loadProcedures();
             }
+          }
+
+          function closePicker() {
+            pickerView.value = false;
+            favSearch.value = "";
+            procSearch.value = "";
           }
 
           async function loadProcedures() {
@@ -1006,7 +1046,6 @@
             } catch (e) {
               sql.value = "CALL " + name + "();";
             }
-            procDropdownOpen.value = false;
             procSearch.value = "";
             if (sql.value.includes("<") && ta) {
               requestAnimationFrame(() => {
@@ -1017,6 +1056,11 @@
             } else if (ta) {
               ta.blur();
             }
+          }
+
+          async function selectProcedureFromPicker(name) {
+            await selectProcedure(name);
+            closePicker();
           }
 
           function generateRandom() {
@@ -1216,18 +1260,12 @@
             }
           }
 
-          document.addEventListener("click", () => {
-            favOpen.value = false;
-            procDropdownOpen.value = false;
-          });
-
           return {
             sql,
             loading,
             result,
             currentDb,
             favorites,
-            favOpen,
             favSearch,
             favLoading,
             favToast,
@@ -1235,6 +1273,11 @@
             favNameInput,
             favPendingSql,
             filteredFavorites,
+            pickerView,
+            pickerFavFlex,
+            pickerProcFlex,
+            openPicker,
+            closePicker,
             handleFavorite,
             confirmFavorite,
             removeFavorite,
@@ -1244,11 +1287,10 @@
             onKeydown,
             procList,
             procSearch,
-            procDropdownOpen,
             procLoading,
             filteredProcList,
-            toggleProcDropdown,
             selectProcedure,
+            selectProcedureFromPicker,
             randMax,
             randResult,
             randError,
