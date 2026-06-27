@@ -30,8 +30,10 @@
 
 ```
 DatabasePortable/
-├── start.sh                     # 一键启动脚本（后台守护模式）
-├── stop.sh                      # 一键停止脚本
+├── start.sh                     # macOS/Linux 一键启动脚本（后台守护模式）
+├── stop.sh                      # macOS/Linux 一键停止脚本
+├── start.bat                    # Windows 一键启动脚本（后台运行）
+├── stop.bat                     # Windows 一键停止脚本
 ├── mysql_web_console/
 │   ├── main.py                  # FastAPI 应用入口及路由
 │   ├── db.py                    # 数据库连接池与执行逻辑
@@ -84,12 +86,24 @@ REQUIRE_LOGIN=false
 
 使用项目根目录的脚本，一键后台启动 / 停止：
 
+**macOS / Linux：**
+
 ```bash
 # 启动服务（后台运行，自动激活虚拟环境）
 ./start.sh
 
 # 停止服务（优雅停止，超时后强制终止）
 ./stop.sh
+```
+
+**Windows：**
+
+```cmd
+# 启动服务（后台运行，自动激活虚拟环境）
+start.bat
+
+# 停止服务（优雅停止，超时后强制终止）
+stop.bat
 ```
 
 启动成功后终端会显示 PID 和访问地址，日志输出到 `mysql_web_console/app.log`。
