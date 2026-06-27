@@ -12,3 +12,7 @@ db_config = {
 }
 
 require_login = os.getenv("REQUIRE_LOGIN", "false").lower() in ("true", "1", "yes")
+
+token_expire_hours = float(os.getenv("TOKEN_EXPIRE_HOURS", "24"))
+
+cors_origins = os.getenv("CORS_ORIGINS", "*")

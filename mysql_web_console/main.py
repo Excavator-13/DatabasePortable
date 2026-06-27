@@ -1,15 +1,17 @@
 import secrets
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import db
-from config import require_login
+from config import cors_origins, require_login, token_expire_hours
 
-_tokens: dict[str, None] = {}
+_tokens: dict[str, float] = {}
 
 
 @asynccontextmanager
@@ -22,6 +24,15 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="MySQL Web Console", lifespan=lifespan)
+
+origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class SqlRequest(BaseModel):
@@ -57,6 +68,13 @@ async def auth_middleware(request: Request, call_next):
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
             if token in _tokens:
+                elapsed_hours = (time.time() - _tokens[token]) / 3600
+                if elapsed_hours > token_expire_hours:
+                    _tokens.pop(token, None)
+                    return JSONResponse(
+                        status_code=401,
+                        content={"detail": "Token 已过期，请重新登录"},
+                    )
                 if not db.is_pool_ready():
                     _tokens.pop(token, None)
                     return JSONResponse(
@@ -99,7 +117,7 @@ async def login(body: LoginRequest):
     except Exception as e:
         return {"success": False, "message": f"连接失败: {str(e)}"}
     token = secrets.token_hex(32)
-    _tokens[token] = None
+    _tokens[token] = time.time()
     return {"success": True, "token": token}
 
 

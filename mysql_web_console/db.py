@@ -168,7 +168,18 @@ def _check_single_statement(sql: str) -> str | None:
     return None
 
 
-# 查询当前连接使用的数据库名，通过 SELECT DATABASE() 获取
+_IDENTIFIER_RE = re.compile(r'^[a-zA-Z0-9_]+$')
+_SESSION_VAR_RE = re.compile(r'^@\w+_auto$', re.IGNORECASE)
+
+
+def _validate_identifier(name: str) -> bool:
+    return bool(_IDENTIFIER_RE.match(name))
+
+
+def _validate_session_var(name: str) -> bool:
+    return bool(_SESSION_VAR_RE.match(name))
+
+
 def _parse_out_params(sql: str) -> list[str]:
     return re.findall(r'@(\w+_auto)\b', sql, re.IGNORECASE)
 
@@ -270,6 +281,9 @@ async def describe_table(table_name: str) -> dict:
         "columns": [],
         "rows": [],
     }
+    if not _validate_identifier(table_name):
+        empty_result["message"] = f"非法表名: {table_name}"
+        return empty_result
     if _pool is None:
         empty_result["message"] = "数据库连接池未初始化"
         return empty_result
@@ -410,6 +424,9 @@ async def execute_sql(sql: str) -> dict:
                 actual_sql = sql
 
                 if proc_name and call_args:
+                    if not _validate_identifier(proc_name):
+                        empty_result["message"] = f"非法存储过程名: {proc_name}"
+                        return empty_result
                     try:
                         params_meta = await _get_proc_params_on_conn(conn, proc_name)
                         if params_meta:
@@ -420,6 +437,9 @@ async def execute_sql(sql: str) -> dict:
                                     arg = call_args[idx].strip()
                                     if not arg.startswith('@'):
                                         var_name = f"@{meta['name']}_auto"
+                                        if not _validate_session_var(var_name):
+                                            empty_result["message"] = f"非法会话变量名: {var_name}"
+                                            return empty_result
                                         inout_set_vars.append((var_name, arg))
                                         modified_args[idx] = var_name
                                         needs_set = True
@@ -430,7 +450,7 @@ async def execute_sql(sql: str) -> dict:
 
                 async with conn.cursor() as cursor:
                     for var_name, value in inout_set_vars:
-                        await cursor.execute(f"SET {var_name} = {value}")
+                        await cursor.execute(f"SET {var_name} = %s", (value,))
 
                     await cursor.execute(actual_sql)
 
@@ -449,10 +469,17 @@ async def execute_sql(sql: str) -> dict:
                 out_vars = _parse_out_params(actual_sql)
                 out_params = []
                 if out_vars:
+                    for var in out_vars:
+                        if not _validate_session_var(f"@{var}"):
+                            empty_result["message"] = f"非法会话变量名: @{var}"
+                            return empty_result
                     async with conn.cursor() as out_cursor:
                         select_parts = []
                         for var in out_vars:
                             original_name = var[:-5]
+                            if not _validate_identifier(original_name):
+                                empty_result["message"] = f"非法变量别名: {original_name}"
+                                return empty_result
                             select_parts.append(f"@{var} AS `{original_name}`")
                         select_sql = "SELECT " + ", ".join(select_parts)
                         await out_cursor.execute(select_sql)
