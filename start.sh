@@ -43,7 +43,7 @@ source "$APP_DIR/venv/bin/activate"
 
 cd "$APP_DIR"
 
-nohup python -m uvicorn main:app --host "$HOST" --port "$PORT" > "$APP_DIR/app.log" 2>&1 &
+nohup "$APP_DIR/venv/bin/python" -m uvicorn main:app --host "$HOST" --port "$PORT" > "$APP_DIR/app.log" 2>&1 &
 echo $! > "$PID_FILE"
 
 sleep 1
